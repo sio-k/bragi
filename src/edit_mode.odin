@@ -613,21 +613,22 @@ insert_newlines_and_indent :: proc(pane: ^Pane) -> (total_length_of_inserted_cha
 
     remove_selections(pane)
 
+    // TODO(nawe) should also reindent current line
     for &cursor, current_index in pane.cursors {
         if !cursor.active do continue
         buffer_lines := pane.line_starts[:]
-        count_by_characters := get_line_indent_count(pane, cursor.pos)
         line_index := get_line_index(cursor.pos, buffer_lines)
+        count_by_characters := get_line_indent_count(pane, line_index, buffer_lines)
         line_text := get_line_text(pane, line_index, buffer_lines)
         indent_tokens := get_indentation_tokens(pane.buffer, line_text)
-        delta := calculate_indent_delta(indent_tokens)
+        delta := _calculate_indent_delta(indent_tokens)
 
         // since we do electric indentation, we should have taken care
         // of the indent delta of this line, but if the user has
         // closed the block after the soft line start, we want to make
         // sure we take into account that amount of delta too.
         if delta < 0 && line_index > 0 {
-            indent_chars_prev_line := get_line_indent_count(pane, buffer_lines[line_index - 1])
+            indent_chars_prev_line := get_line_indent_count(pane, line_index - 1, buffer_lines)
             if indent_chars_prev_line > count_by_characters do delta += 1
         }
 
@@ -666,8 +667,86 @@ insert_newlines_and_indent :: proc(pane: ^Pane) -> (total_length_of_inserted_cha
     return
 }
 
+// TODO(nawe) this implementation isn't good, it's just something I
+// put together quickly and works reliably only on one cursor.
 maybe_indent_or_go_to_tab_stop :: proc(pane: ^Pane) {
-    unimplemented()
+    Line_Indent_Info :: struct {
+        line_start_offset: int,
+        indent_amount:     int,
+    }
+
+    line_has_code :: proc(pane: ^Pane, start, end: int) -> bool {
+        for r in pane.contents[start:end] do if r != '\t' || r != ' ' do return true
+        return false
+    }
+
+    copy_cursors(pane, pane.buffer)
+
+    for &cursor in pane.cursors {
+        if !cursor.active do continue
+
+        buffer_lines := pane.line_starts[:]
+        line_index := get_line_index(cursor.pos, buffer_lines)
+        count_of_characters_wanted := 0
+        if line_index == 0 do continue
+
+        test_line_index := line_index - 1
+        for test_line_index > 0 && count_of_characters_wanted == 0 {
+            count_of_characters_wanted = get_line_indent_count(pane, test_line_index, buffer_lines)
+            test_line_index -= 1
+        }
+
+        if count_of_characters_wanted == 0 do continue
+
+        indent_characters_in_curr_line := get_line_indent_count(pane, line_index, buffer_lines)
+        curr_line_start, curr_line_end := get_line_boundaries(line_index, buffer_lines)
+
+        if curr_line_start != curr_line_end && line_has_code(pane, curr_line_start, curr_line_end) {
+            prev_line_text := get_line_text(pane, line_index - 1, buffer_lines)
+            curr_line_text := get_line_text(pane, line_index, buffer_lines)
+            prev_line_indent_tokens := get_indentation_tokens(pane.buffer, prev_line_text)
+            curr_line_indent_tokens := get_indentation_tokens(pane.buffer, curr_line_text)
+            delta := _calculate_indent_delta(prev_line_indent_tokens)
+
+            // the start of the previous line was a closing token
+            if len(prev_line_indent_tokens) > 0 && prev_line_indent_tokens[0].action == .Close {
+                delta += 1
+            }
+
+            // the start of this line is a closing token
+            if len(curr_line_indent_tokens) > 0 && curr_line_indent_tokens[0].action == .Close {
+                delta -= 1
+            }
+
+            count_of_characters_wanted = _calculate_new_indent(pane.buffer, count_of_characters_wanted, delta)
+        }
+
+        if count_of_characters_wanted != indent_characters_in_curr_line {
+            offset := count_of_characters_wanted - indent_characters_in_curr_line
+
+            if offset > 0 {
+                builder := strings.builder_make(context.temp_allocator)
+                for _ in 0..<offset {
+                    switch pane.buffer.indent.tab_char {
+                    case .space: strings.write_string(&builder, " ")
+                    case .tab:   strings.write_string(&builder, "\t")
+                    }
+                }
+
+                insert_at(pane.buffer, curr_line_start, strings.to_string(builder))
+            } else {
+                remove_at(pane.buffer, curr_line_start, abs(offset))
+            }
+
+            cursor.pos += offset
+            cursor.sel += offset
+        }
+
+        if cursor.pos - curr_line_start < count_of_characters_wanted {
+            cursor.pos = curr_line_start + count_of_characters_wanted
+            cursor.sel = cursor.pos
+        }
+    }
 }
 
 maybe_recenter_cursor :: proc(pane: ^Pane, force_recenter := false) {
@@ -692,10 +771,14 @@ maybe_recenter_cursor :: proc(pane: ^Pane, force_recenter := false) {
 editor_toggle_selection :: proc(pane: ^Pane, force_reset := false) {
     if pane.cursor_selecting || force_reset {
         pane.cursor_selecting = false
-        for &cursor in pane.cursors do cursor.sel = cursor.pos
+        for &cursor in pane.cursors {
+            cursor.sel = cursor.pos
+        }
     } else {
         pane.cursor_selecting = true
-        for &cursor in pane.cursors do cursor.active = true
+        for &cursor in pane.cursors {
+            cursor.active = true
+        }
     }
 }
 
@@ -743,4 +826,32 @@ _maybe_merge_overlapping_cursors :: proc(pane: ^Pane) {
             }
         }
     }
+}
+
+@(private="file")
+_calculate_new_indent :: #force_inline proc(buffer: ^Buffer, current_indent, delta: int) -> (result: int) {
+    result = current_indent
+    switch buffer.indent.tab_char {
+    case .space: result += delta * buffer.indent.tab_size
+    case .tab:   result += delta
+    }
+    return max(result, 0)
+}
+
+@(private="file")
+_calculate_indent_delta :: proc(tokens: []Indentation_Token) -> (delta: int) {
+    // maybe this should be a little bit more consistent, making sure
+    // that the token that opened the next level of indentation is the
+    // first one to be used to close it?
+
+    // Emacs doesn't care if you're closing a block with the correct
+    // token, so for now we'll follow the same approach.
+    for token in tokens {
+        switch token.action {
+        case .None: // do nothi
+        case .Close: delta -= 1
+        case .Open:  delta += 1
+        }
+    }
+    return
 }

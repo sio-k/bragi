@@ -80,6 +80,9 @@ tokenize_odin_indentation :: proc(buffer: ^Buffer, text: string) -> []Indentatio
     tokenizer.buf = text
     tokens := make([dynamic]Indentation_Token, context.temp_allocator)
 
+    switch_keyword_found := false
+    case_keyword_found := false
+
     for {
         token := get_next_token(&tokenizer)
         indent: Indentation_Token
@@ -87,10 +90,35 @@ tokenize_odin_indentation :: proc(buffer: ^Buffer, text: string) -> []Indentatio
         // TODO(nawe) handle the raw string and the comment multiline
         // that shouldn't really start with indentation.
         #partial switch token.kind {
+            case .Keyword: {
+                if token.text == "switch" {
+                    switch_keyword_found = true
+                }
+                if token.text == "case" {
+                    indent.action = .Close
+                    indent.kind = .Brace
+                    case_keyword_found = true
+                }
+            }
+            case .Operation: {
+                if operation, is_operation := token.variant.(Operation); is_operation {
+                    if operation == .Colon && case_keyword_found {
+                        indent.action = .Open;  indent.kind = .Brace
+                    }
+                }
+            }
             case .Punctuation: {
                 if punctuation, is_punctuation := token.variant.(Punctuation); is_punctuation {
                     #partial switch punctuation {
-                        case .Brace_Left:    indent.action = .Open;  indent.kind = .Brace
+                        case .Newline: {
+                            if case_keyword_found   do case_keyword_found = false
+                            if switch_keyword_found do switch_keyword_found = false
+                        }
+                        case .Brace_Left:    {
+                            if !case_keyword_found {
+                                indent.action = .Open;  indent.kind = .Brace
+                            }
+                        }
                         case .Brace_Right:   indent.action = .Close; indent.kind = .Brace
                         case .Bracket_Left:  indent.action = .Open;  indent.kind = .Bracket
                         case .Bracket_Right: indent.action = .Close; indent.kind = .Bracket

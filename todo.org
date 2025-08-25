@@ -1,4 +1,4 @@
-Mac/Bug: proper handling of left and right alt. Might need to internally rename the modifiers like Emacs does to Ctrl and Meta. Using Meta as the secondary modifier key. Meta would mean Alt for Windows/Linux and Alt for Mac. Also proper handling of the Command key. Check how Emacs handles CMD in Mac.
+Bug/Mac: proper handling of left and right alt. Might need to internally rename the modifiers like Emacs does to Ctrl and Meta. Using Meta as the secondary modifier key. Meta would mean Alt for Windows/Linux and Alt for Mac. Also proper handling of the Command key. Check how Emacs handles CMD in Mac.
 
 Bug/Cursors: while in multiple cursors, and having a cursor at the end of a line and the another at the beginning of the following line, writing acts weirdly because it inserts the rune correctly for the lowest offset cursor but it doesn't respect the line feed and insert the next rune within an offset of 1, multiple inserts makes the highest offset cursor insert the text from right to left.
 
@@ -7,3 +7,7 @@ Improvement/Buffer: make the buffer piece table to actually store the line start
 Improvement/Search: save the search history, or at least the last term that was used for searching so the user can press search twice and automatically populate.
 
 Feature/Marks: save pane/buffer marks for some user actions. Show the existing marks on the pane fringe
+
+Maybe Bug/Cursor: when converting the cursor offset to coords and back, I'm using the passed line information. This might not be a good idea, since the only time we care about coords might be when we do something in the view, and then it should always use the pane lines (that could be the wrapped lines or regular buffer lines) but not an arbitrary line information.
+
+Improvement/Piece Table: track the line starts in pieces

@@ -169,9 +169,11 @@ update_active_pane :: proc() {
 
 update_and_draw_panes :: proc() {
     profiling_start("all panes: update and draw")
+
     for pane in open_panes {
         assert(pane.buffer != nil)
         assert(pane.texture != nil)
+        assert(len(pane.cursors) > 0)
 
         if .Need_Full_Repaint not_in pane.flags {
             draw_texture(pane.texture, nil, &pane.rect)
@@ -385,11 +387,8 @@ is_in_line :: #force_inline proc(offset: int, lines: []int, line_index: int) -> 
     return offset >= start && offset <= end
 }
 
-get_line_indent_count :: proc(pane: ^Pane, offset: int) -> (level: int) {
-    // always use the buffer lines, don't care about wrapping
-    buffer_lines := pane.line_starts[:]
-    line_index := get_line_index(offset, buffer_lines)
-    start, end := get_line_boundaries(line_index, buffer_lines)
+get_line_indent_count :: proc(pane: ^Pane, line_index: int, lines: []int) -> (level: int) {
+    start, end := get_line_boundaries(line_index, lines)
     count_spaces := 0
     count_tabs := 0
 
@@ -414,23 +413,6 @@ get_line_indent_count :: proc(pane: ^Pane, offset: int) -> (level: int) {
     } else {
         return count_tabs
     }
-}
-
-calculate_indent_delta :: proc(tokens: []Indentation_Token) -> (delta: int) {
-    // maybe this should be a little bit more consistent, making sure
-    // that the token that opened the next level of indentation is the
-    // first one to be used to close it?
-
-    // Emacs doesn't care if you're closing a block with the correct
-    // token, so for now we'll follow the same approach.
-    for token in tokens {
-        switch token.action {
-        case .None: // do nothi
-        case .Close: delta -= 1
-        case .Open:  delta += 1
-        }
-    }
-    return
 }
 
 get_line_index :: #force_inline proc(offset: int, lines: []int) -> (line_index: int) {
