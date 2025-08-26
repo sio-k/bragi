@@ -628,12 +628,12 @@ insert_newlines_and_indent :: proc(pane: ^Pane) {
     }
 
     for &cursor, current_index in pane.cursors {
+        if !cursor.active do continue
         offset := insert_at(pane.buffer, cursor.pos, "\n")
-        cursor.pos += offset
-        cursor.sel = cursor.pos
 
         for &other, other_index in pane.cursors {
-            if current_index == other_index do continue
+            // cursors are sorted, we can just do this
+            if current_index > other_index do continue
             other.pos += offset
             other.sel = other.pos
         }
