@@ -10,4 +10,4 @@ Feature/Marks: save pane/buffer marks for some user actions. Show the existing m
 
 Maybe Bug/Cursor: when converting the cursor offset to coords and back, I'm using the passed line information. This might not be a good idea, since the only time we care about coords might be when we do something in the view, and then it should always use the pane lines (that could be the wrapped lines or regular buffer lines) but not an arbitrary line information.
 
-Improvement/Piece Table: track the line starts in pieces
+Bug/Cursor+Indent: when using a closing token, like `}` but already at the start of the line (column 0), it's eating the previous line through indentation. Check edit_mode.odin:insert_at_points. Also should get rid of pane.odin:get_line_text_until_offset that gives us a lot of trouble because it will panic in the middle of an update/edit in multiline indentation.

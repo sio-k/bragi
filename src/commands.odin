@@ -31,6 +31,8 @@ Command :: enum u32 {
     clone_cursor_beginning_of_line,
     clone_cursor_end_of_line,
 
+    indent_or_tab_stop,
+
     recenter_cursor,
     prev_cursor,
     next_cursor,

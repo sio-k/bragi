@@ -11,7 +11,8 @@ import "core:slice"
 import "core:strings"
 import "core:time"
 
-UNDO_TIMEOUT :: 500 * time.Millisecond
+UNDO_TIMEOUT_URGENT_EDIT :: 500 * time.Millisecond
+UNDO_TIMEOUT_LINEAR_EDIT :: 2 * time.Second
 
 Buffer_Flags :: bit_set[Buffer_Flag; u8]
 
@@ -38,19 +39,12 @@ Buffer :: struct {
     allocator:        runtime.Allocator,
     uuid:             uuid.Identifier,
 
-    // NOTE(nawe) this cursor array should ALWAYS be a view to the
-    // pane cursors array, hence there's no allocation happening. This
-    // is important because we're not freeing this, since is always
-    // freed from the pane. This retains a view so when an edit
-    // happens we can save it in the undo/redo array and then, when
-    // undoing, recover that state.
-    cursors:          []Cursor,
+    cursors:          []Cursor, // for undo/redo and switch buffer, a copy to the pane's cursors
     original_source:  strings.Builder,
     add_source:       strings.Builder,
     pieces:           [dynamic]Piece,
     text_content:     strings.Builder,
     tokens:           [dynamic]Token_Kind,
-    length_of_buffer: int,
 
     indent: struct {
         tab_char: Tab_Character,
@@ -58,19 +52,20 @@ Buffer :: struct {
     },
 
     history_enabled:  bool,
-    redo, undo:       [dynamic]^History_State,
+    redo, undo:       [dynamic]History_State,
+    last_backup_time: time.Tick,
 
     name:             string,
     filepath:         string,
     major_mode:       Major_Mode,
     flags:            Buffer_Flags,
-    last_edit_time:   time.Tick,
 }
 
 Piece :: struct {
     source:      Source_Buffer,
     start:       int,
     length:      int,
+    line_starts: [dynamic]int,
 }
 
 History_State :: struct {
@@ -135,13 +130,13 @@ buffer_init :: proc(buffer: ^Buffer, contents: []byte, allocator := context.allo
     }
 
     contents_length := len(buffer.original_source.buf)
-    buffer.length_of_buffer = contents_length
 
     original_piece := Piece{
         source = .Original,
         start  = 0,
         length = contents_length,
     }
+    update_piece_line_starts(buffer, &original_piece)
     append(&buffer.pieces, original_piece)
 }
 
@@ -287,6 +282,7 @@ buffer_destroy :: proc(buffer: ^Buffer) {
     undo_clear(buffer, &buffer.undo)
     undo_clear(buffer, &buffer.redo)
     delete(buffer.cursors)
+    for piece in buffer.pieces do delete(piece.line_starts)
     delete(buffer.pieces)
     delete(buffer.tokens)
     delete(buffer.undo)
@@ -311,38 +307,15 @@ update_opened_buffers :: proc() {
         if !is_active_in_panes do continue
 
         if .Dirty in buffer.flags {
+            profiling_start("putting pieces together and making lines array")
             unflag_buffer(buffer, {.Dirty})
-            total_length := 0
-            builder := &buffer.text_content
-            strings.builder_reset(builder)
-            lines_array := make([dynamic]int, context.temp_allocator)
-
-            for piece in buffer.pieces {
-                start, end := piece.start, piece.start + piece.length
-
-                switch piece.source {
-                case .Add:
-                    strings.write_string(
-                        builder, strings.to_string(buffer.add_source)[start:end],
-                    )
-                case .Original:
-                    strings.write_string(
-                        builder, strings.to_string(buffer.original_source)[start:end],
-                    )
-                }
-
-                total_length += piece.length
-            }
-
+            strings.builder_reset(&buffer.text_content)
+            lines_array := make([dynamic]int, 1, context.temp_allocator)
+            collect_pieces_from_buffer(buffer, &buffer.text_content, &lines_array)
             tokenize_buffer(buffer)
+            profiling_end()
 
-            buffer.length_of_buffer = total_length
-            append(&lines_array, 0)
-            for r, index in strings.to_string(buffer.text_content) {
-                if r == '\n' do append(&lines_array, index + 1)
-            }
-            append(&lines_array, total_length + 1)
-
+            profiling_start("passing buffer text to pane")
             for pane in open_panes {
                 if pane.buffer != buffer do continue
                 delete(pane.line_starts)
@@ -351,43 +324,39 @@ update_opened_buffers :: proc() {
                 if .Line_Wrappings in pane.flags do recalculate_line_wrappings(pane)
                 flag_pane(pane, {.Need_Full_Repaint})
             }
+            profiling_end()
         }
     }
     profiling_end()
 }
 
-undo_clear :: proc(buffer: ^Buffer, undo: ^[dynamic]^History_State) {
+undo_clear :: proc(buffer: ^Buffer, undo: ^[dynamic]History_State) {
     for len(undo) > 0 {
         item := pop(undo)
         delete(item.cursors)
         delete(item.pieces)
-        free(item, buffer.allocator)
     }
 }
 
-undo_state_push :: proc(buffer: ^Buffer, undo: ^[dynamic]^History_State) -> mem.Allocator_Error {
+undo_state_push :: proc(buffer: ^Buffer, undo: ^[dynamic]History_State) -> mem.Allocator_Error {
     log.debug("pushing new undo state")
-    item := (^History_State)(
-        // safe to use b.cursors here because we should always have a copy at hand when doing this
-        mem.alloc(size_of(History_State) + len(buffer.cursors) + len(buffer.pieces),
-                  align_of(History_State), buffer.allocator) or_return,
-    )
+    item: History_State
 
     item.cursors = slice.clone(buffer.cursors[:])
     item.pieces  = slice.clone(buffer.pieces[:])
-    buffer.last_edit_time = time.tick_now()
+    buffer.last_backup_time = time.tick_now()
 
     append(undo, item) or_return
     return nil
 }
 
-maybe_save_undo_state :: proc(buffer: ^Buffer) {
-    if time.tick_diff(buffer.last_edit_time, time.tick_now()) > UNDO_TIMEOUT {
+maybe_save_undo_state :: proc(buffer: ^Buffer, timeout: time.Duration) {
+    if time.tick_diff(buffer.last_backup_time, time.tick_now()) > timeout {
         undo_state_push(buffer, &buffer.undo)
     }
 }
 
-undo :: proc(buffer: ^Buffer, undo, redo: ^[dynamic]^History_State) -> (bool, []Cursor, []Piece) {
+undo :: proc(buffer: ^Buffer, undo, redo: ^[dynamic]History_State) -> (bool, []Cursor, []Piece) {
     if len(undo) > 0 {
         undo_state_push(buffer, redo)
         item := pop(undo)
@@ -395,7 +364,6 @@ undo :: proc(buffer: ^Buffer, undo, redo: ^[dynamic]^History_State) -> (bool, []
         pieces := slice.clone(item.pieces, context.temp_allocator)
         delete(item.cursors)
         delete(item.pieces)
-        free(item, buffer.allocator)
         flag_buffer(buffer, {.Dirty, .Modified})
         return true, cursors, pieces
     }
@@ -438,6 +406,46 @@ get_major_mode_name :: proc(buffer: ^Buffer) -> string {
     unreachable()
 }
 
+collect_pieces_from_buffer :: proc(
+    buffer: ^Buffer, builder: ^strings.Builder, lines_array: ^[dynamic]int,
+) {
+    // request_up_to_line provides a escape hatch in case we need to
+    // break once we eat the amount of lines requested
+
+    // NOTE(nawe) the user should provide a lines array where the
+    // first line should already be the index 0, the rest will be
+    // filled up by this procedure, including the last line. The
+    // builder should be given empty.
+    assert(len(lines_array) == 1 && lines_array[0] == 0)
+    assert(len(builder.buf) == 0)
+
+    total_length := 0
+
+    for piece in buffer.pieces {
+        start, end := piece.start, piece.start + piece.length
+
+        switch piece.source {
+        case .Add:
+            strings.write_string(
+                builder, strings.to_string(buffer.add_source)[start:end],
+            )
+        case .Original:
+            strings.write_string(
+                builder, strings.to_string(buffer.original_source)[start:end],
+            )
+        }
+
+        for line_start in piece.line_starts {
+            append(lines_array, total_length + line_start)
+        }
+
+        total_length += piece.length
+    }
+
+    // the last line for safety
+    append(lines_array, total_length + 1)
+}
+
 insert_at :: proc(buffer: ^Buffer, offset: int, text: string) -> (length_of_text: int) {
     add_source_length := len(buffer.add_source.buf)
     length_of_text = len(text)
@@ -445,7 +453,8 @@ insert_at :: proc(buffer: ^Buffer, offset: int, text: string) -> (length_of_text
     piece := &buffer.pieces[piece_index]
     end_of_piece := piece.start + piece.length
     flag_buffer(buffer, {.Dirty, .Modified})
-    maybe_save_undo_state(buffer)
+
+    maybe_save_undo_state(buffer, UNDO_TIMEOUT_LINEAR_EDIT)
 
     strings.write_string(&buffer.add_source, text)
 
@@ -454,6 +463,7 @@ insert_at :: proc(buffer: ^Buffer, offset: int, text: string) -> (length_of_text
     // the most common operation while entering text in sequence.
     if piece.source == .Add && new_offset == end_of_piece && add_source_length == end_of_piece {
         piece.length += length_of_text
+        update_piece_line_starts(buffer, piece)
         return
     }
 
@@ -476,9 +486,13 @@ insert_at :: proc(buffer: ^Buffer, offset: int, text: string) -> (length_of_text
         length = piece.length - (new_offset - piece.start),
     }
 
+    maybe_save_undo_state(buffer, UNDO_TIMEOUT_URGENT_EDIT)
+
     new_pieces := slice.filter([]Piece{left, middle, right}, proc(new_piece: Piece) -> bool {
         return new_piece.length > 0
     }, context.temp_allocator)
+    for &new_piece in new_pieces do update_piece_line_starts(buffer, &new_piece)
+    delete(buffer.pieces[piece_index].line_starts)
     ordered_remove(&buffer.pieces, piece_index)
     inject_at(&buffer.pieces, piece_index, ..new_pieces)
 
@@ -494,7 +508,7 @@ remove_at :: proc(buffer: ^Buffer, offset: int, amount: int) {
         return
     }
 
-    maybe_save_undo_state(buffer)
+    maybe_save_undo_state(buffer, UNDO_TIMEOUT_LINEAR_EDIT)
 
     // Remove may affect multiple pieces.
     first_piece_index, first_offset := locate_piece(buffer, offset)
@@ -508,9 +522,11 @@ remove_at :: proc(buffer: ^Buffer, offset: int, amount: int) {
         if first_offset == piece.start {
             piece.start += amount
             piece.length -= amount
+            update_piece_line_starts(buffer, piece)
             return
         } else if last_offset == piece.start + piece.length {
             piece.length -= amount
+            update_piece_line_starts(buffer, piece)
             return
         }
     }
@@ -529,17 +545,44 @@ remove_at :: proc(buffer: ^Buffer, offset: int, amount: int) {
         start  = last_offset,
         length = last_piece.length - (last_offset - last_piece.start),
     }
+
+    maybe_save_undo_state(buffer, UNDO_TIMEOUT_URGENT_EDIT)
+
     new_pieces := slice.filter([]Piece{left, right}, proc(new_piece: Piece) -> bool {
         return new_piece.length > 0
     }, context.temp_allocator)
-
+    for &new_piece in new_pieces do update_piece_line_starts(buffer, &new_piece)
+    for piece in buffer.pieces[first_piece_index:last_piece_index + 1] do delete(piece.line_starts)
     remove_range(&buffer.pieces, first_piece_index, last_piece_index + 1)
     inject_at(&buffer.pieces, first_piece_index, ..new_pieces)
 }
 
-locate_piece :: proc(buffer: ^Buffer, offset: int) -> (piece_index, new_offset: int) {
+make_sure_pieces_have_lines :: proc(buffer: ^Buffer) {
+    for &piece in buffer.pieces {
+        piece.line_starts = make([dynamic]int)
+        update_piece_line_starts(buffer, &piece)
+    }
+}
+
+update_piece_line_starts :: proc(buffer: ^Buffer, piece: ^Piece) {
+    buf: []byte
+    start := piece.start
+    end := piece.start + piece.length
+    clear(&piece.line_starts)
+
+    switch piece.source {
+    case .Add:      buf = buffer.add_source.buf[start:end]
+    case .Original: buf = buffer.original_source.buf[start:end]
+    }
+
+    for c, index in buf {
+        if c == '\n' do append(&piece.line_starts, index + 1)
+    }
+}
+
+locate_piece :: proc(buffer: ^Buffer, offset: int) -> (piece_index, remaining: int) {
     assert(offset >= 0)
-    remaining := offset
+    remaining = offset
 
     for piece, index in buffer.pieces {
         if remaining <= piece.length {

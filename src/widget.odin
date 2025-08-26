@@ -98,7 +98,7 @@ widget_open_find_buffer :: proc() {
     // prefer most recent edited buffers... (not stable sorting but mostly cosmetic, not really important)
     slice.sort_by(global_widget.all_results[:], proc(a: Widget_Result, b: Widget_Result) -> bool {
         buf1, buf2 := a.value.(^Buffer), b.value.(^Buffer)
-        return time.tick_since(buf1.last_edit_time) < time.tick_since(buf2.last_edit_time)
+        return time.tick_since(buf1.last_backup_time) < time.tick_since(buf2.last_backup_time)
     })
 
     // ...but append the current active buffer last

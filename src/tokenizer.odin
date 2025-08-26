@@ -96,7 +96,7 @@ tokenize_buffer :: proc(buffer: ^Buffer) {
     }
 
     // add the EOF token so we always have tokens.
-    assign_at(&buffer.tokens, buffer.length_of_buffer + 1, Token_Kind.EOF)
+    assign_at(&buffer.tokens, len(buffer.text_content.buf) + 1, Token_Kind.EOF)
 }
 
 get_indentation_tokens :: proc(buffer: ^Buffer, text: string) -> []Indentation_Token {

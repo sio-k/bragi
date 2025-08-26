@@ -152,6 +152,8 @@ _settings_setup_basic_bragi_keybindings :: proc() {
     commands_map["Shift-Down"]  = .select_down
     commands_map["Shift-Up"]    = .select_up
 
+    commands_map["Tab"] = .indent_or_tab_stop
+
     when ODIN_OS == .Darwin {
         commands_map["Cmd-Left"]  = .move_prev_word
         commands_map["Cmd-Right"] = .move_next_word

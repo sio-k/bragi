@@ -31,10 +31,6 @@ edit_mode_keyboard_event_handler :: proc(event: Event_Keyboard, cmd: Command) ->
             insert_newlines_and_indent(pane)
             return true
         }
-        case .K_TAB: {
-            maybe_indent_or_go_to_tab_stop(pane)
-            return true
-        }
         case .K_DELETE: {
             t: Translation = .right
 
@@ -76,6 +72,10 @@ edit_mode_keyboard_event_handler :: proc(event: Event_Keyboard, cmd: Command) ->
 
     case .toggle_selection_mode:
         editor_toggle_selection(pane)
+        return true
+
+    case .indent_or_tab_stop:
+        maybe_indent_and_go_to_tab_stop(pane)
         return true
 
     case .prev_cursor:
@@ -360,12 +360,15 @@ edit_mode_keyboard_event_handler :: proc(event: Event_Keyboard, cmd: Command) ->
             log.debug("no more history to undo")
             return true
         }
-
+        profiling_start("doing undo")
+        for piece in buffer.pieces do delete(piece.line_starts)
         delete(pane.cursors)
         delete(buffer.pieces)
         pane.cursors = slice.clone_to_dynamic(cursors)
         buffer.pieces = slice.clone_to_dynamic(pieces)
+        make_sure_pieces_have_lines(buffer)
         editor_toggle_selection(pane, true)
+        profiling_end()
         return true
     case .redo:
         copy_cursors(pane, buffer)
@@ -376,11 +379,15 @@ edit_mode_keyboard_event_handler :: proc(event: Event_Keyboard, cmd: Command) ->
             return true
         }
 
+        profiling_start("doing redo")
+        for piece in buffer.pieces do delete(piece.line_starts)
         delete(pane.cursors)
         delete(buffer.pieces)
         pane.cursors = slice.clone_to_dynamic(cursors)
         buffer.pieces = slice.clone_to_dynamic(pieces)
+        make_sure_pieces_have_lines(buffer)
         editor_toggle_selection(pane, true)
+        profiling_end()
         return true
 
     case .cut_region:
@@ -667,86 +674,160 @@ insert_newlines_and_indent :: proc(pane: ^Pane) -> (total_length_of_inserted_cha
     return
 }
 
-// TODO(nawe) this implementation isn't good, it's just something I
-// put together quickly and works reliably only on one cursor.
-maybe_indent_or_go_to_tab_stop :: proc(pane: ^Pane) {
-    Line_Indent_Info :: struct {
-        line_start_offset: int,
-        indent_amount:     int,
-    }
-
-    line_has_code :: proc(pane: ^Pane, start, end: int) -> bool {
-        for r in pane.contents[start:end] do if r != '\t' || r != ' ' do return true
-        return false
-    }
-
+maybe_indent_and_go_to_tab_stop :: proc(pane: ^Pane) {
     copy_cursors(pane, pane.buffer)
+
+    lines_to_indent := make([dynamic]int, context.temp_allocator)
+    buffer_lines := pane.line_starts[:]
 
     for &cursor in pane.cursors {
         if !cursor.active do continue
 
-        buffer_lines := pane.line_starts[:]
-        line_index := get_line_index(cursor.pos, buffer_lines)
-        count_of_characters_wanted := 0
-        if line_index == 0 do continue
+        low, high := sorted_cursor(cursor)
+        low_coords  := cursor_offset_to_coords(pane, buffer_lines, low)
+        high_coords := cursor_offset_to_coords(pane, buffer_lines, high)
 
-        test_line_index := line_index - 1
-        for test_line_index > 0 && count_of_characters_wanted == 0 {
-            count_of_characters_wanted = get_line_indent_count(pane, test_line_index, buffer_lines)
-            test_line_index -= 1
+        for line_index in low_coords.row..<high_coords.row + 1 {
+            append(&lines_to_indent, line_index)
         }
 
-        if count_of_characters_wanted == 0 do continue
+        coords: Coords
 
-        indent_characters_in_curr_line := get_line_indent_count(pane, line_index, buffer_lines)
-        curr_line_start, curr_line_end := get_line_boundaries(line_index, buffer_lines)
-
-        if curr_line_start != curr_line_end && line_has_code(pane, curr_line_start, curr_line_end) {
-            prev_line_text := get_line_text(pane, line_index - 1, buffer_lines)
-            curr_line_text := get_line_text(pane, line_index, buffer_lines)
-            prev_line_indent_tokens := get_indentation_tokens(pane.buffer, prev_line_text)
-            curr_line_indent_tokens := get_indentation_tokens(pane.buffer, curr_line_text)
-            delta := _calculate_indent_delta(prev_line_indent_tokens)
-
-            // the start of the previous line was a closing token
-            if len(prev_line_indent_tokens) > 0 && prev_line_indent_tokens[0].action == .Close {
-                delta += 1
-            }
-
-            // the start of this line is a closing token
-            if len(curr_line_indent_tokens) > 0 && curr_line_indent_tokens[0].action == .Close {
-                delta -= 1
-            }
-
-            count_of_characters_wanted = _calculate_new_indent(pane.buffer, count_of_characters_wanted, delta)
+        if cursor.pos == low {
+            coords = low_coords
+        } else {
+            coords = high_coords
         }
 
-        if count_of_characters_wanted != indent_characters_in_curr_line {
-            offset := count_of_characters_wanted - indent_characters_in_curr_line
+        new_pos, _ := get_line_boundaries(coords.row, buffer_lines)
+        for new_pos < len(pane.contents) {
+            b := pane.contents[new_pos]
+            if b != ' ' && b != '\t' do break
+            new_pos += 1
+        }
 
-            if offset > 0 {
-                builder := strings.builder_make(context.temp_allocator)
-                for _ in 0..<offset {
-                    switch pane.buffer.indent.tab_char {
-                    case .space: strings.write_string(&builder, " ")
-                    case .tab:   strings.write_string(&builder, "\t")
-                    }
+        cursor.pos = max(cursor.pos, new_pos)
+        cursor.sel = cursor.pos
+    }
+
+    if len(lines_to_indent) == 1 {
+        offset := _indent_single_line(
+            pane.buffer, pane.contents, lines_to_indent[0], buffer_lines,
+        )
+
+        for &cursor in pane.cursors {
+            if cursor.pos > buffer_lines[lines_to_indent[0]] {
+                cursor.pos += offset
+                cursor.sel = cursor.pos
+            }
+        }
+    } else {
+        for line_index in lines_to_indent {
+            // somewhat slow here, but we need to reconstruct some lines
+            // in order to figure out how much we need to
+            // indent. Hopefully we don't have to go to the end of the file.
+            temp_line_starts := make([dynamic]int, 1, context.temp_allocator)
+            contents := strings.builder_make(context.temp_allocator)
+
+            collect_pieces_from_buffer(pane.buffer, &contents, &temp_line_starts)
+
+            offset := _indent_single_line(
+                pane.buffer, strings.to_string(contents), line_index, temp_line_starts[:],
+            )
+
+            for &cursor in pane.cursors {
+                if cursor.pos > temp_line_starts[line_index] {
+                    cursor.pos += offset
+                    cursor.sel = cursor.pos
                 }
-
-                insert_at(pane.buffer, curr_line_start, strings.to_string(builder))
-            } else {
-                remove_at(pane.buffer, curr_line_start, abs(offset))
             }
-
-            cursor.pos += offset
-            cursor.sel += offset
-        }
-
-        if cursor.pos - curr_line_start < count_of_characters_wanted {
-            cursor.pos = curr_line_start + count_of_characters_wanted
-            cursor.sel = cursor.pos
         }
     }
+
+    pane.cursor_selecting = false
+}
+
+@(private="file")
+_indent_single_line :: proc(
+    buffer: ^Buffer, text: string, line_index: int, lines: []int,
+) -> (offset: int) {
+    count_indent_chars :: proc(text: string) -> (result: int) {
+        if len(text) == 0 do return 0
+        for r in text {
+            if r == ' ' || r == '\t' {
+                result += 1
+            } else {
+                break
+            }
+        }
+        return result
+    }
+
+    line_has_code :: proc(text: string) -> bool {
+        for r in text {
+            if r != '\t' && r != ' ' do return true
+        }
+        return false
+    }
+
+    // we indent by looking to the previous line, so don't even try to
+    // indent the first line.
+    if line_index == 0 do return
+    indent_chars_wanted := 0
+
+    test_line_index := line_index - 1
+    for test_line_index > 0 {
+        start, end := get_line_boundaries(test_line_index, lines)
+        if start == end {
+            test_line_index -= 1
+            continue
+        }
+
+        indent_chars_wanted = count_indent_chars(text[start:end])
+        break
+    }
+
+    curr_line_start, curr_line_end := get_line_boundaries(line_index, lines)
+    indent_chars_in_curr_line := count_indent_chars(text[curr_line_start:curr_line_end])
+
+    if curr_line_start != curr_line_end && line_has_code(text[curr_line_start:curr_line_end]) {
+        prev_line_start, prev_line_end := get_line_boundaries(line_index - 1, lines)
+        prev_line_tokens := get_indentation_tokens(buffer, text[prev_line_start:prev_line_end])
+        curr_line_tokens := get_indentation_tokens(buffer, text[curr_line_start:curr_line_end])
+        delta := _calculate_indent_delta(prev_line_tokens)
+
+        // the start of the previous line was a closing token
+        if len(prev_line_tokens) > 0 && prev_line_tokens[0].action == .Close {
+            delta += 1
+        }
+
+        // the start of this line is a closing token
+        if len(curr_line_tokens) > 0 && curr_line_tokens[0].action == .Close {
+            delta -= 1
+        }
+
+        indent_chars_wanted = _calculate_new_indent(buffer, indent_chars_wanted, delta)
+    }
+
+    if indent_chars_wanted != indent_chars_in_curr_line {
+        offset = indent_chars_wanted - indent_chars_in_curr_line
+
+        if offset > 0 {
+            builder := strings.builder_make(context.temp_allocator)
+            for _ in 0..<offset {
+                switch buffer.indent.tab_char {
+                case .space: strings.write_string(&builder, " ")
+                case .tab:   strings.write_string(&builder, "\t")
+                }
+            }
+
+            insert_at(buffer, curr_line_start, strings.to_string(builder))
+        } else {
+            remove_at(buffer, curr_line_start, abs(offset))
+        }
+    }
+
+    return
 }
 
 maybe_recenter_cursor :: proc(pane: ^Pane, force_recenter := false) {
