@@ -457,6 +457,12 @@ sorted_cursor :: #force_inline proc(cursor: Cursor) -> (low, high: int) {
     return
 }
 
+sort_cursors_by_offset :: proc(pane: ^Pane) {
+    slice.stable_sort_by(pane.cursors[:], proc(i, j: Cursor) -> bool {
+        return i.pos < j.pos
+    })
+}
+
 is_pane_focused :: proc(pane: ^Pane) -> bool {
     return !global_widget.active && active_pane.uuid == pane.uuid
 }
@@ -587,7 +593,10 @@ translate_position :: proc(pane: ^Pane, pos: int, t: Translation, max_column := 
         last_column = -1
 
         if coords.column == 0 {
-            for result < len(buf) && is_space(buf[result]) do result += 1
+            // go to soft beginning of line (a.k.a. tab stop)
+            for result < len(buf) && buf[result] != '\n' && is_space(buf[result]) {
+                result += 1
+            }
         } else {
             coords.column = 0
             result = cursor_coords_to_offset(pane, lines, coords)

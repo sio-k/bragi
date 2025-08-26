@@ -11,3 +11,7 @@ Feature/Marks: save pane/buffer marks for some user actions. Show the existing m
 Maybe Bug/Cursor: when converting the cursor offset to coords and back, I'm using the passed line information. This might not be a good idea, since the only time we care about coords might be when we do something in the view, and then it should always use the pane lines (that could be the wrapped lines or regular buffer lines) but not an arbitrary line information.
 
 Bug/Cursor+Indent: when using a closing token, like `}` but already at the start of the line (column 0), it's eating the previous line through indentation. Check edit_mode.odin:insert_at_points. Also should get rid of pane.odin:get_line_text_until_offset that gives us a lot of trouble because it will panic in the middle of an update/edit in multiline indentation.
+
+Bug/Indent(Odin): switch statements are not indenting their `case` according to Odin style of code, but that means that the closign brace `}` is not conisdered a closing statement and so breaking indentation.
+
+[Unimporant] Code Style/-disallow-do: analyze if it's a good idea to get rid of the inline if statement with do. It's a good feature for me but at this point I have too many things happening in single lines sometimes and might just be better to have code style a little bit different

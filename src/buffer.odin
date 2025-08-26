@@ -416,27 +416,31 @@ collect_pieces_from_buffer :: proc(
     // first line should already be the index 0, the rest will be
     // filled up by this procedure, including the last line. The
     // builder should be given empty.
-    assert(len(lines_array) == 1 && lines_array[0] == 0)
-    assert(len(builder.buf) == 0)
+    if lines_array != nil do assert(len(lines_array) == 1 && lines_array[0] == 0)
+    if builder != nil do assert(len(builder.buf) == 0)
 
     total_length := 0
 
     for piece in buffer.pieces {
-        start, end := piece.start, piece.start + piece.length
+        if builder != nil {
+            start, end := piece.start, piece.start + piece.length
 
-        switch piece.source {
-        case .Add:
-            strings.write_string(
-                builder, strings.to_string(buffer.add_source)[start:end],
-            )
-        case .Original:
-            strings.write_string(
-                builder, strings.to_string(buffer.original_source)[start:end],
-            )
+            switch piece.source {
+            case .Add:
+                strings.write_string(
+                    builder, strings.to_string(buffer.add_source)[start:end],
+                )
+            case .Original:
+                strings.write_string(
+                    builder, strings.to_string(buffer.original_source)[start:end],
+                )
+            }
         }
 
-        for line_start in piece.line_starts {
-            append(lines_array, total_length + line_start)
+        if lines_array != nil {
+            for line_start in piece.line_starts {
+                append(lines_array, total_length + line_start)
+            }
         }
 
         total_length += piece.length
