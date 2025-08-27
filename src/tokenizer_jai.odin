@@ -146,6 +146,8 @@ parse_dot :: proc(t: ^Jai_Tokenizer, token: ^Token) {
     if is_char(t, '.') {
         token.variant = .Dot_Dot
         t.offset += 1
+    } else if is_number(t) {
+        parse_number(t, token)
     } else if t.whitespace_to_left {
         next_token := peek_next_token(t)
 
@@ -159,7 +161,7 @@ parse_dot :: proc(t: ^Jai_Tokenizer, token: ^Token) {
 
 parse_identifier :: proc(t: ^Jai_Tokenizer, token: ^Token) {
     token.kind = .Identifier
-    token.text = read_word(t)
+    token.text = read_jai_word(t)
 
     // keep this order, hoping to find the value in smaller slices first.
     switch {
@@ -246,6 +248,23 @@ parse_string_literal :: proc(t: ^Jai_Tokenizer, token: ^Token) {
 
     if is_eof(t) do return
     t.offset += 1
+}
+
+read_jai_word :: proc(t: ^Tokenizer) -> string {
+    start := t.offset
+    escape_on := false
+    for !is_eof(t) && !is_char(t, '\n') {
+        if !escape_on && !is_char(t, '\\') && !is_valid_word_component(t) do break
+
+        if !escape_on && is_char(t, '\\') {
+            escape_on = true
+        } else if escape_on && !is_char(t, ' ') {
+            escape_on = false
+        }
+        t.offset += 1
+    }
+    end := t.offset
+    return t.buf[start:end]
 }
 
 peek_next_token :: proc(t: ^Jai_Tokenizer, eat_whitespace := true) -> (next_token: Token) {
