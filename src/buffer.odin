@@ -125,11 +125,7 @@ buffer_init :: proc(buffer: ^Buffer, contents: []byte, allocator := context.allo
 
     contents_length := len(buffer.original_source.buf)
 
-    original_piece := Piece{
-        source = .Original,
-        start  = 0,
-        length = contents_length,
-    }
+    original_piece := _create_original_piece(contents_length)
     update_piece_line_starts(buffer, &original_piece)
     append(&buffer.pieces, original_piece)
 }
@@ -294,6 +290,7 @@ update_opened_buffers :: proc() {
         if .Dirty in buffer.flags {
             profiling_start("putting pieces together and making lines array")
             unflag_buffer(buffer, {.Dirty})
+            if len(buffer.pieces) == 0 do append(&buffer.pieces, _create_original_piece())
             strings.builder_reset(&buffer.text_content)
             lines_array := make([dynamic]int, 1, context.temp_allocator)
             collect_pieces_from_buffer(buffer, &buffer.text_content, &lines_array)
@@ -379,16 +376,6 @@ is_crlf :: #force_inline proc(buffer: ^Buffer) -> bool {
 
 is_continuation_byte :: proc(b: byte) -> bool {
 	return b >= 0x80 && b < 0xc0
-}
-
-get_major_mode_name :: proc(buffer: ^Buffer) -> string {
-    switch buffer.major_mode {
-    case .Bragi: return "Bragi"
-    case .Jai:   return "Jai"
-    case .Odin:  return "Odin"
-    }
-
-    unreachable()
 }
 
 collect_pieces_from_buffer :: proc(
@@ -581,4 +568,13 @@ locate_piece :: proc(buffer: ^Buffer, offset: int) -> (piece_index, remaining: i
     }
 
     unreachable()
+}
+
+@(private="file")
+_create_original_piece :: proc(length: int = 0) -> Piece {
+    return {
+        source = .Original,
+        start  = 0,
+        length = length,
+    }
 }

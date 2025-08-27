@@ -80,3 +80,7 @@ get_indentation_tokens :: proc(buffer: ^Buffer, text: string) -> []Indentation_T
     if indent_token_proc == nil do return {}
     return indent_token_proc(buffer, text)
 }
+
+get_major_mode_name :: proc(buffer: ^Buffer) -> string {
+    return major_mode_settings[buffer.major_mode].visual_name
+}
