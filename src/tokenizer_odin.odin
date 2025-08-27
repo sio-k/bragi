@@ -24,7 +24,7 @@ tokenize_odin :: proc(buffer: ^Buffer, starting_offset := 0) {
         token := get_next_token(&tokenizer)
         if token.kind == .EOF do break
 
-        t1, t2, t3 := get_previous_tokens(&tokenizer)
+        t1, t2, _ := get_previous_tokens(&tokenizer)
 
         switch {
         case should_save_current_token_like_directive(&tokenizer, token):
@@ -41,29 +41,9 @@ tokenize_odin :: proc(buffer: ^Buffer, starting_offset := 0) {
             } else if is_op && op == .Colon && t2.kind == .Identifier {
                 token.kind = .Type
             }
-        case should_save_proc_name(&tokenizer, token):
-            if t1.kind == .Directive { // like #force_inline
-                t3.kind = .Function
-                save_token(buffer, &tokenizer, t3)
-            } else if t1.kind == .Operation { // name :: proc
-                if op, ok := t1.variant.(Operation); ok && op == .Colon_Colon {
-                    t2.kind = .Function
-                    save_token(buffer, &tokenizer, t2)
-                }
-            } else {
-                if punctuation, ok := token.variant.(Punctuation); ok && punctuation == .Paren_Left {
-                    t1.kind = .Function
-                    save_token(buffer, &tokenizer, t1)
-                }
-            }
         case should_save_struct_name(&tokenizer, token):
             t2.kind = .Type
             save_token(buffer, &tokenizer, t2)
-        case should_save_variable_name(&tokenizer, token):
-            if t2.kind != .Type {
-                t2.kind = .Variable
-                save_token(buffer, &tokenizer, t2)
-            }
         }
 
         tokenizer.prev_tokens[2] = tokenizer.prev_tokens[1]
@@ -80,7 +60,6 @@ tokenize_odin_indentation :: proc(buffer: ^Buffer, text: string) -> []Indentatio
     tokenizer.buf = text
     tokens := make([dynamic]Indentation_Token, context.temp_allocator)
 
-    switch_keyword_found := false
     case_keyword_found := false
 
     for {
@@ -91,9 +70,6 @@ tokenize_odin_indentation :: proc(buffer: ^Buffer, text: string) -> []Indentatio
         // that shouldn't really start with indentation.
         #partial switch token.kind {
             case .Keyword: {
-                if token.text == "switch" {
-                    switch_keyword_found = true
-                }
                 if token.text == "case" {
                     indent.action = .Close
                     indent.kind = .Brace
@@ -110,15 +86,8 @@ tokenize_odin_indentation :: proc(buffer: ^Buffer, text: string) -> []Indentatio
             case .Punctuation: {
                 if punctuation, is_punctuation := token.variant.(Punctuation); is_punctuation {
                     #partial switch punctuation {
-                        case .Newline: {
-                            if case_keyword_found   do case_keyword_found = false
-                            if switch_keyword_found do switch_keyword_found = false
-                        }
-                        case .Brace_Left:    {
-                            if !case_keyword_found {
-                                indent.action = .Open;  indent.kind = .Brace
-                            }
-                        }
+                        case .Newline: if case_keyword_found do case_keyword_found = false
+                        case .Brace_Left:    indent.action = .Open;  indent.kind = .Brace
                         case .Brace_Right:   indent.action = .Close; indent.kind = .Brace
                         case .Bracket_Left:  indent.action = .Open;  indent.kind = .Bracket
                         case .Bracket_Right: indent.action = .Close; indent.kind = .Bracket
@@ -128,6 +97,10 @@ tokenize_odin_indentation :: proc(buffer: ^Buffer, text: string) -> []Indentatio
                 }
             }
         }
+
+        tokenizer.prev_tokens[2] = tokenizer.prev_tokens[1]
+        tokenizer.prev_tokens[1] = tokenizer.prev_tokens[0]
+        tokenizer.prev_tokens[0] = token
 
         append(&tokens, indent)
         if token.kind == .EOF do break
@@ -425,18 +398,6 @@ should_save_current_token_like_type :: proc(t: ^Odin_Tokenizer, token: Token) ->
     return token.kind == .Identifier && ok && punctuation == .Caret
 }
 
-should_save_proc_name :: proc(t: ^Odin_Tokenizer, token: Token) -> bool {
-    if token.kind == .Keyword {
-        return token.text == "proc"
-    } else if token.kind == .Punctuation {
-        t1, _, _ := get_previous_tokens(t)
-        punctuation, is_punctuation := token.variant.(Punctuation)
-        return t1.kind == .Identifier && is_punctuation && punctuation == .Paren_Left
-    }
-
-    return false
-}
-
 should_save_struct_name :: proc(t: ^Odin_Tokenizer, token: Token) -> bool {
     if token.kind == .Keyword && token.text == "struct" {
         t1, _, _ := get_previous_tokens(t)
@@ -445,19 +406,6 @@ should_save_struct_name :: proc(t: ^Odin_Tokenizer, token: Token) -> bool {
         }
     }
 
-    return false
-}
-
-should_save_variable_name :: proc(t: ^Odin_Tokenizer, token: Token) -> bool {
-    if token.kind != .Keyword {
-        t1, _, t3 := get_previous_tokens(t)
-
-        if t1.kind == .Operation {
-            op := t1.variant.(Operation)
-            return op == .Colon_Colon || op == .Colon_Equal ||
-                (op == .Colon && t3.kind != .Keyword) // Like: case <value>:
-        }
-    }
     return false
 }
 
