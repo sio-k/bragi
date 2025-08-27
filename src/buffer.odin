@@ -24,12 +24,6 @@ Buffer_Flag :: enum u8 {
     Scratch   = 4, // created by Bragi as scratchpad. If saved as file, this flag will be removed.
 }
 
-Major_Mode :: enum u8 {
-    Bragi = 0,
-    Jai,
-    Odin,
-}
-
 Source_Buffer :: enum {
     Add,
     Original,
@@ -146,15 +140,6 @@ buffer_index :: proc(buffer: ^Buffer) -> int {
     }
 
     unreachable()
-}
-
-get_major_mode_by_extension :: proc(ext: string) -> Major_Mode {
-    switch ext {
-    case ".jai":  return .Jai
-    case ".odin": return .Odin
-    }
-
-    return .Bragi
 }
 
 @(private="file")

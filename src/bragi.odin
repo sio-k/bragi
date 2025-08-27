@@ -97,6 +97,7 @@ main :: proc() {
     settings_init()
     platform_init()
     commands_init()
+    major_modes_init()
     debug_init()
 
     initialize_font_related_stuff()
@@ -270,6 +271,7 @@ main :: proc() {
     fonts_destroy()
     commands_destroy()
     debug_destroy()
+    major_modes_destroy()
 
     active_pane = nil
 

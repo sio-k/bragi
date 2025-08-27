@@ -11,8 +11,8 @@ edit_mode_keyboard_event_handler :: proc(event: Event_Keyboard, cmd: Command) ->
     buffer := pane.buffer
 
     if event.is_text_input {
-        length_of_inserted_text := insert_at_points(pane, event.text)
-        return length_of_inserted_text > 0
+        insert_at_points(pane, event.text)
+        return true
     }
 
     // handle the generic ones first
@@ -510,7 +510,6 @@ remove_to :: proc(pane: ^Pane, t: Translation) -> (total_amount_of_removed_chara
 
 remove_selections :: proc(pane: ^Pane, array: ^[dynamic]Cursor = nil) {
     cursors_array := array == nil ? &pane.cursors : array
-
     copy_cursors(pane, pane.buffer)
 
     for &cursor, current_index in cursors_array {
@@ -541,64 +540,48 @@ remove_selections :: proc(pane: ^Pane, array: ^[dynamic]Cursor = nil) {
     _maybe_merge_overlapping_cursors(pane)
 }
 
-insert_at_points :: proc(pane: ^Pane, text: string) -> (total_length_of_inserted_characters: int) {
-    profiling_start("inserting text input")
+insert_at_points :: proc(pane: ^Pane, text: string) {
+    profiling_start("inserting text")
     copy_cursors(pane, pane.buffer)
+    sort_cursors_by_offset(pane)
 
-    // just check the first token, if it's a closing indentation
-    // token, figure out if it was also the first token in the
-    // line that is not an indentation character.
+    // check if the inserted text may need indentation
     indent_tokens := get_indentation_tokens(pane.buffer, text)
     maybe_should_reindent := len(indent_tokens) > 0 && indent_tokens[0].action == .Close
-    reindent_amount := 0
-
-    switch pane.buffer.indent.tab_char {
-    case .space: reindent_amount = pane.buffer.indent.tab_size
-    case .tab:   reindent_amount = 1
-    }
-
-    if maybe_should_reindent {
-        for &cursor in pane.cursors {
-            if !cursor.active do continue
-
-            buffer_lines := pane.line_starts[:]
-            line_index := get_line_index(cursor.pos, buffer_lines)
-            line_text := get_line_text_until_offset(pane, line_index, buffer_lines, cursor.pos)
-            should_reindent := true
-
-            for r in line_text {
-                should_reindent = r == ' ' || r == '\t'
-                if !should_reindent do break
-            }
-
-            if should_reindent {
-                cursor.sel -= reindent_amount
-            }
-        }
-    }
+    temp_lines_to_indent := make([dynamic]int, context.temp_allocator)
 
     remove_selections(pane)
 
-    for &cursor, current_index in pane.cursors {
-        if !cursor.active do continue
+    if maybe_should_reindent {
+        buffer_lines := pane.line_starts[:]
 
-        delta_offset := insert_at(pane.buffer, cursor.pos, text)
-        total_length_of_inserted_characters += delta_offset
-        cursor.pos += delta_offset
-        cursor.sel = cursor.pos
-
-        for &other, other_index in pane.cursors {
-            if current_index == other_index do continue
-
-            if other.pos > cursor.pos {
-                other.pos += delta_offset
-                other.sel += delta_offset
-            }
+        for cursor in pane.cursors {
+            append(&temp_lines_to_indent, get_line_index(cursor.pos, buffer_lines))
         }
     }
 
+    for cursor, current_index in pane.cursors {
+        if !cursor.active do continue
+
+        offset := insert_at(pane.buffer, cursor.pos, text)
+
+        for &other, other_index in pane.cursors {
+            if current_index > other_index do continue
+            other.pos += offset
+            other.sel = other.pos
+        }
+    }
+
+    if len(temp_lines_to_indent) > 0 {
+        unique_lines_to_indent := slice.unique(temp_lines_to_indent[:])
+        slice.stable_sort(unique_lines_to_indent)
+        _indent_multi_line(
+            pane.buffer, unique_lines_to_indent,
+            _on_indent_realign_active_pane_cursors,
+        )
+    }
+
     profiling_end()
-    return
 }
 
 insert_newlines_and_indent :: proc(pane: ^Pane) {
@@ -616,18 +599,21 @@ insert_newlines_and_indent :: proc(pane: ^Pane) {
     // to make sure we remap then before we ask for reindent
     temp_lines_to_indent := make([dynamic]int, context.temp_allocator)
     temp_lines_array := make([dynamic]int, 1, context.temp_allocator)
-    collect_pieces_from_buffer(pane.buffer, nil, &temp_lines_array)
 
-    for &cursor, index in pane.cursors {
-        if !cursor.active do continue
-        // because each cursor will add offset, and we sorted the
-        // cursors by their position, it is safe to add the index
-        current_line := get_line_index(cursor.pos, temp_lines_array[:]) + index
-        // and we indent current and next line
-        append(&temp_lines_to_indent, current_line, current_line + 1)
+    if should_do_electric_indent(pane.buffer) {
+        collect_pieces_from_buffer(pane.buffer, nil, &temp_lines_array)
+
+        for cursor, index in pane.cursors {
+            if !cursor.active do continue
+            // because each cursor will add offset, and we sorted the
+            // cursors by their position, it is safe to add the index
+            current_line := get_line_index(cursor.pos, temp_lines_array[:]) + index
+            // and we indent current and next line
+            append(&temp_lines_to_indent, current_line, current_line + 1)
+        }
     }
 
-    for &cursor, current_index in pane.cursors {
+    for cursor, current_index in pane.cursors {
         if !cursor.active do continue
         offset := insert_at(pane.buffer, cursor.pos, "\n")
 
@@ -639,12 +625,14 @@ insert_newlines_and_indent :: proc(pane: ^Pane) {
         }
     }
 
-    unique_lines_to_indent := slice.unique(temp_lines_to_indent[:])
-    slice.stable_sort(unique_lines_to_indent)
-    _indent_multi_line(
-        pane.buffer, unique_lines_to_indent,
-        _on_indent_realign_active_pane_cursors,
-    )
+    if len(temp_lines_to_indent) > 0 {
+        unique_lines_to_indent := slice.unique(temp_lines_to_indent[:])
+        slice.stable_sort(unique_lines_to_indent)
+        _indent_multi_line(
+            pane.buffer, unique_lines_to_indent,
+            _on_indent_realign_active_pane_cursors,
+        )
+    }
 
     profiling_end()
 }
@@ -654,6 +642,13 @@ maybe_indent_and_go_to_tab_stop :: proc(pane: ^Pane) {
     assert(pane.uuid == active_pane.uuid)
 
     copy_cursors(pane, pane.buffer)
+
+    // if the buffer is not expecting indentation, just treat it as
+    // moving to the beginning of line.
+    if !should_do_electric_indent(pane.buffer) {
+        move_to(pane, .beginning_of_line)
+        return
+    }
 
     temp_lines_to_indent := make([dynamic]int, context.temp_allocator)
     buffer_lines := pane.line_starts[:]
@@ -707,6 +702,39 @@ maybe_indent_and_go_to_tab_stop :: proc(pane: ^Pane) {
     }
 
     pane.cursor_selecting = false
+}
+
+maybe_recenter_cursor :: proc(pane: ^Pane, force_recenter := false) {
+    cursor := get_first_active_cursor(pane)
+    lines := get_lines_array(pane)
+    coords := cursor_offset_to_coords(pane, lines, cursor.pos)
+    top_edge := pane.y_offset
+    bottom_edge := pane.y_offset + pane.visible_rows
+    right_edge := pane.visible_columns
+
+    if force_recenter || coords.row < top_edge || coords.row > bottom_edge {
+        pane.y_offset = clamp(coords.row - pane.visible_rows/2, 0, len(lines) - pane.visible_rows/2)
+
+        if coords.column < right_edge {
+            pane.x_offset = 0
+        } else {
+            pane.x_offset = coords.column/2
+        }
+    }
+}
+
+editor_toggle_selection :: proc(pane: ^Pane, force_reset := false) {
+    if pane.cursor_selecting || force_reset {
+        pane.cursor_selecting = false
+        for &cursor in pane.cursors {
+            cursor.sel = cursor.pos
+        }
+    } else {
+        pane.cursor_selecting = true
+        for &cursor in pane.cursors {
+            cursor.active = true
+        }
+    }
 }
 
 @(private="file")
@@ -824,39 +852,6 @@ _indent_single_line :: proc(buffer: ^Buffer, text: string, line_index: int, line
         }
     }
     profiling_end()
-}
-
-maybe_recenter_cursor :: proc(pane: ^Pane, force_recenter := false) {
-    cursor := get_first_active_cursor(pane)
-    lines := get_lines_array(pane)
-    coords := cursor_offset_to_coords(pane, lines, cursor.pos)
-    top_edge := pane.y_offset
-    bottom_edge := pane.y_offset + pane.visible_rows
-    right_edge := pane.visible_columns
-
-    if force_recenter || coords.row < top_edge || coords.row > bottom_edge {
-        pane.y_offset = clamp(coords.row - pane.visible_rows/2, 0, len(lines) - pane.visible_rows/2)
-
-        if coords.column < right_edge {
-            pane.x_offset = 0
-        } else {
-            pane.x_offset = coords.column/2
-        }
-    }
-}
-
-editor_toggle_selection :: proc(pane: ^Pane, force_reset := false) {
-    if pane.cursor_selecting || force_reset {
-        pane.cursor_selecting = false
-        for &cursor in pane.cursors {
-            cursor.sel = cursor.pos
-        }
-    } else {
-        pane.cursor_selecting = true
-        for &cursor in pane.cursors {
-            cursor.active = true
-        }
-    }
 }
 
 @(private="file")

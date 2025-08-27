@@ -88,27 +88,6 @@ Tokenizer :: struct {
     whitespace_to_left: bool,
 }
 
-tokenize_buffer :: proc(buffer: ^Buffer) {
-    switch buffer.major_mode {
-    case .Bragi:
-    case .Jai:   tokenize_jai(buffer)
-    case .Odin:  tokenize_odin(buffer)
-    }
-
-    // add the EOF token so we always have tokens.
-    assign_at(&buffer.tokens, len(buffer.text_content.buf) + 1, Token_Kind.EOF)
-}
-
-get_indentation_tokens :: proc(buffer: ^Buffer, text: string) -> []Indentation_Token {
-    switch buffer.major_mode {
-    case .Bragi: return {}
-    case .Jai:   return tokenize_jai_indentation (buffer, text)
-    case .Odin:  return tokenize_odin_indentation(buffer, text)
-    }
-
-    unreachable()
-}
-
 save_token :: proc(buffer: ^Buffer, t: ^Tokenizer, token: Basic_Token) {
     start := t.starting_offset + token.start
     end := start + token.length
