@@ -243,11 +243,6 @@ main :: proc() {
                     update_widget_texture()
                 }
 
-                if v.dpi_scale != dpi_scale {
-                    dpi_scale = v.dpi_scale
-                    initialize_font_related_stuff()
-                }
-
                 event.handled = true
             }
         }

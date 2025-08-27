@@ -15,3 +15,5 @@ Bug/Cursor+Indent: when using a closing token, like `}` but already at the start
 Bug/Indent(Odin): switch statements are not indenting their `case` according to Odin style of code, but that means that the closign brace `}` is not conisdered a closing statement and so breaking indentation.
 
 [Unimporant] Code Style/-disallow-do: analyze if it's a good idea to get rid of the inline if statement with do. It's a good feature for me but at this point I have too many things happening in single lines sometimes and might just be better to have code style a little bit different
+
+Improvement/Window Resizing And System Display Scale: if the user changes their display scale or is currently resizing the window, we need to reconfigure things accordingly. Currently we're resizing things every frame and also this affects the DPI scale. Make this consistent before re-enabling it.
