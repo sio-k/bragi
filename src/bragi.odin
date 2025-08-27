@@ -28,7 +28,7 @@ FONT_UI_BOLD_NAME   :: "roboto-semibold.ttf"
 FONT_UI_BOLD_DATA   :: #load(RUN_TREE_DIR + "/fonts/roboto-bold.ttf")
 
 MINIMUM_WINDOW_SIZE :: 800
-DEFAULT_WINDOW_SIZE :: 1080
+DEFAULT_WINDOW_SIZE :: 1200
 
 window_height:   i32  = DEFAULT_WINDOW_SIZE
 window_width:    i32  = DEFAULT_WINDOW_SIZE
@@ -252,7 +252,7 @@ main :: proc() {
         prepare_for_drawing()
         update_opened_buffers()
         update_active_pane()
-        update_and_draw_panes()
+        draw_panes()
         update_and_draw_widget()
         debug_draw()
         draw_frame()

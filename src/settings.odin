@@ -80,6 +80,8 @@ settings_init :: proc() {
     settings.editor_font_size = DEFAULT_FONT_EDITOR_SIZE
     settings.ui_font_size     = DEFAULT_FONT_UI_SIZE
 
+    settings.always_wrap_lines = true
+
     settings.default_tab_size      = 4
     settings.default_tab_character = .space
 
@@ -153,6 +155,7 @@ _settings_setup_basic_bragi_keybindings :: proc() {
     commands_map["Shift-Up"]    = .select_up
 
     commands_map["Tab"] = .indent_or_tab_stop
+    commands_map["F5"] = .toggle_line_wrappings
 
     when ODIN_OS == .Darwin {
         commands_map["Cmd-Left"]  = .move_prev_word

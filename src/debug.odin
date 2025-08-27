@@ -54,7 +54,7 @@ debug_draw :: proc() {
     pen = draw_text(font_bold, pen, "Current Pane\n")
     pane_info_str := fmt.tprintf(
         "Visible: Cols {} Rows {}\nOffset: X {} Y {}\n\n",
-        pane.visible_columns, pane.visible_rows,
+        get_pane_visible_columns(pane), pane.visible_rows,
         pane.x_offset, pane.y_offset,
     )
     pen = draw_text(font_regular, pen, pane_info_str)

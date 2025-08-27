@@ -14,6 +14,7 @@ Command :: enum u32 {
     quit_mode, // resets all modes
 
     toggle_selection_mode,
+    toggle_line_wrappings,
 
     remove_left,
     remove_right,

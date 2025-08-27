@@ -74,6 +74,14 @@ edit_mode_keyboard_event_handler :: proc(event: Event_Keyboard, cmd: Command) ->
         editor_toggle_selection(pane)
         return true
 
+    case .toggle_line_wrappings:
+        if .Line_Wrappings in pane.flags {
+            unflag_pane(pane, {.Line_Wrappings})
+        } else {
+            flag_pane(pane, {.Line_Wrappings})
+        }
+        return true
+
     case .indent_or_tab_stop:
         maybe_indent_and_go_to_tab_stop(pane)
         return true
@@ -710,7 +718,7 @@ maybe_recenter_cursor :: proc(pane: ^Pane, force_recenter := false) {
     coords := cursor_offset_to_coords(pane, lines, cursor.pos)
     top_edge := pane.y_offset
     bottom_edge := pane.y_offset + pane.visible_rows
-    right_edge := pane.visible_columns
+    right_edge := get_pane_visible_columns(pane)
 
     if force_recenter || coords.row < top_edge || coords.row > bottom_edge {
         pane.y_offset = clamp(coords.row - pane.visible_rows/2, 0, len(lines) - pane.visible_rows/2)

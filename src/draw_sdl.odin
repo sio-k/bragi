@@ -109,7 +109,10 @@ draw_code :: proc(pane: ^Pane, font: ^Font, pen: Vector2, code_lines: []Code_Lin
     }
 
     for code, y_offset in code_lines {
-        sx := pen.x - i32(pane.x_offset) * font.xadvance
+        sx := pen.x
+        if .Line_Wrappings not_in pane.flags {
+            sx -= i32(pane.x_offset) * font.xadvance
+        }
         sy := pen.y + (i32(y_offset) * font.line_height)
 
         for r, x_offset in code.line {
@@ -145,7 +148,7 @@ draw_code :: proc(pane: ^Pane, font: ^Font, pen: Vector2, code_lines: []Code_Lin
     }
 }
 
-draw_cursor :: proc(font: ^Font, pen: Vector2, rune_behind: rune, visible: bool, filled: bool, active: bool) {
+draw_cursor :: proc(font: ^Font, pen: Vector2, rune_behind: rune, visible, filled, active: bool) {
     cursor_height := font.character_height
     cursor_width := font.em_width if settings.cursor_is_a_block else i32(settings.cursor_width)
 
@@ -174,16 +177,18 @@ draw_cursor :: proc(font: ^Font, pen: Vector2, rune_behind: rune, visible: bool,
 
 draw_gutter :: proc(pane: ^Pane) {
     draw_gutter_extension :: proc(pane: ^Pane, font: ^Font, pen: Vector2, line_number: int, lines: []int) {
+        if .Line_Wrappings in pane.flags do return
         left_indicator, right_indicator := get_gutter_indicators(font)
         start, end := get_line_boundaries(line_number, lines)
         text := pane.contents[start:end]
         count := utf8.rune_count_in_string(text)
+        visible_columns := get_pane_visible_columns(pane)
 
         set_color(.ui_line_number_foreground_current, font.texture)
         if pane.x_offset > 0 {
             draw_text(font, pen, left_indicator)
         }
-        if count > pane.visible_columns + pane.x_offset {
+        if count > visible_columns + pane.x_offset {
             draw_text(font, {i32(pane.rect.w) - font.em_width, pen.y}, right_indicator)
         }
     }
@@ -204,6 +209,11 @@ draw_gutter :: proc(pane: ^Pane) {
         pen.y = get_modeline_height()
     }
 
+    if .Line_Wrappings in pane.flags {
+        wrapped_line_start, _ := get_line_boundaries(first_visible_row, pane.wrapped_line_starts[:])
+        first_visible_row = get_line_index(wrapped_line_start, buffer_lines)
+    }
+
     if settings.show_line_numbers {
         size_test_str := fmt.tprintf("{}", len(buffer_lines))
         set_color(.ui_line_number_background)
@@ -213,41 +223,50 @@ draw_gutter :: proc(pane: ^Pane) {
         current_rows := make([dynamic]int, context.temp_allocator)
         for cursor in pane.cursors do append(&current_rows, get_line_index(cursor.pos, buffer_lines))
 
-        for line_number in first_visible_row..<last_visible_row {
-            if line_number >= last_line do break
+        for line_number in 0..<last_line {
+            if line_number > last_visible_row do break
 
-            if slice.contains(current_rows[:], line_number) {
-                set_color(.ui_line_number_background_current)
-                draw_rect(0, pen.y, gutter_size, regular_character_height)
-                set_color(.ui_line_number_foreground_current, font.texture)
-            } else {
-                set_color(.ui_line_number_foreground, font.texture)
+            line_size := i32(get_visual_line_size(pane, line_number))
+
+            if line_number >= first_visible_row {
+                visual_pen := pen
+                visual_pen.y -= (i32(pane.y_offset) * regular_character_height)
+
+                if slice.contains(current_rows[:], line_number) {
+                    set_color(.ui_line_number_background_current)
+                    draw_rect(0, visual_pen.y, gutter_size, line_size * regular_character_height)
+                    set_color(.ui_line_number_foreground_current, font.texture)
+                } else {
+                    set_color(.ui_line_number_foreground, font.texture)
+                }
+
+                line_number_str := strings.right_justify(
+                    fmt.tprintf("{}", line_number + 1),
+                    len(size_test_str) + GUTTER_LINE_NUMBER_JUSTIFY,
+                    " ", context.temp_allocator,
+                )
+
+                // hiding the line number if it's the last line and it's
+                // empty, like Emacs does. Because we're POSIX-compliant,
+                // Bragi adds an empty line feed if the user hasn't done
+                // it, and it's a good idea to not show the number to not
+                // confuse the user. It will start showing if the line has
+                // any text in it.
+                show_line_number := true
+                if line_number == last_line - 1 {
+                    start, end := get_line_boundaries(line_number, buffer_lines)
+                    show_line_number = start != end
+                }
+
+                if show_line_number {
+                    visual_pen.y += y_offset_for_centering
+                    draw_text(font, visual_pen, line_number_str)
+                    draw_gutter_extension(pane, font, visual_pen, line_number, buffer_lines)
+                }
             }
 
-            pen.y += y_offset_for_centering
-            line_number_str := strings.right_justify(
-                fmt.tprintf("{}", line_number + 1),
-                len(size_test_str) + GUTTER_LINE_NUMBER_JUSTIFY,
-                " ", context.temp_allocator,
-            )
-
-            // hiding the line number if it's the last line and it's
-            // empty, like Emacs does. Because we're POSIX-compliant,
-            // Bragi adds an empty line feed if the user hasn't done
-            // it, and it's a good idea to not show the number to not
-            // confuse the user. It will start showing if the line has
-            // any text in it.
-            show_line_number := true
-            if line_number == last_line -1 {
-                line_text := get_line_text(pane, line_number, buffer_lines)
-                show_line_number = len(line_text) > 0
-            }
-
-            if show_line_number do draw_text(font, pen, line_number_str)
-            draw_gutter_extension(pane, font, pen, line_number, buffer_lines)
-            pen.y += regular_character_height - y_offset_for_centering
+            pen.y += (regular_character_height * line_size)
         }
-
     } else {
         set_color(.ui_line_number_background)
         draw_rect(0, 0, gutter_size, pane_height, true)

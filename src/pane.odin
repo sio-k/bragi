@@ -51,7 +51,6 @@ Pane :: struct {
     rect:                Rect,
     texture:             ^Texture,
     x_offset:            int,
-    visible_columns:     int,
     y_offset:            int,
     visible_rows:        int,
 }
@@ -87,6 +86,10 @@ pane_create :: proc(buffer: ^Buffer = nil) -> ^Pane {
     result.cursor_blink_timer = time.tick_now()
     add_cursor(result)
 
+    if settings.always_wrap_lines {
+        flag_pane(result, {.Line_Wrappings})
+    }
+
     if buffer == nil {
         result.buffer = buffer_get_or_create_empty()
     } else {
@@ -117,6 +120,8 @@ update_active_pane :: proc() {
     profiling_start("active_pane")
     pane := active_pane
 
+    pane.visible_rows = (int(pane.rect.h) / int(pane.font.line_height)) - 1
+
     if time.tick_diff(last_keystroke, time.tick_now()) < CURSOR_RESET_TIMEOUT {
         pane.cursor_showing = true
         pane.cursor_blink_count = 0
@@ -141,15 +146,18 @@ update_active_pane :: proc() {
         lines := get_lines_array(pane)
         coords := cursor_offset_to_coords(pane, lines, active_cursor.pos)
         has_scrolled := false
+        visible_columns := get_pane_visible_columns(pane)
 
-        for coords.column < pane.x_offset {
-            pane.x_offset -= 1
-            has_scrolled = true
-        }
+        if .Line_Wrappings not_in pane.flags {
+            for coords.column < pane.x_offset {
+                pane.x_offset -= 1
+                has_scrolled = true
+            }
 
-        for coords.column >= pane.visible_columns + pane.x_offset {
-            pane.x_offset += 1
-            has_scrolled = true
+            for coords.column >= visible_columns + pane.x_offset {
+                pane.x_offset += 1
+                has_scrolled = true
+            }
         }
 
         for coords.row < pane.y_offset {
@@ -167,8 +175,8 @@ update_active_pane :: proc() {
     profiling_end()
 }
 
-update_and_draw_panes :: proc() {
-    profiling_start("all panes: update and draw")
+draw_panes :: proc() {
+    profiling_start("draw all panes")
 
     for pane in open_panes {
         assert(pane.buffer != nil)
@@ -216,14 +224,13 @@ update_and_draw_panes :: proc() {
 
         for line_number in first_row..<last_row {
             code_line := Code_Line{}
-            start, _ := get_line_boundaries(line_number, lines)
+            start, end := get_line_boundaries(line_number, lines)
             code_line.start_offset = start
-            code_line.line = get_line_text(pane, line_number, lines)
+            code_line.line = pane.contents[start:end]
             code_line.line_is_wrapped = false
-            end_offset := start + len(code_line.line)
 
-            if end_offset <= len(pane.buffer.tokens) {
-                code_line.tokens = pane.buffer.tokens[start:end_offset]
+            if end <= len(pane.buffer.tokens) {
+                code_line.tokens = pane.buffer.tokens[start:end]
             }
 
             append(&code_lines, code_line)
@@ -232,21 +239,18 @@ update_and_draw_panes :: proc() {
         draw_code(pane, pane.font, initial_pen, code_lines[:], highlights[:])
 
         for cursor in pane.cursors {
-            out_of_bounds, cursor_pen, rune_behind_cursor := prepare_cursor_for_drawing(pane, pane.font, initial_pen, cursor)
+            out_of_bounds, cursor_pen, rune_behind_cursor :=
+                prepare_cursor_for_drawing(pane, pane.font, initial_pen, cursor)
             _ = rune_behind_cursor
 
             if !out_of_bounds do draw_cursor(
-                pane.font, cursor_pen, rune_behind_cursor, pane.cursor_showing, is_pane_focused(pane), cursor.active,
+                pane.font, cursor_pen, rune_behind_cursor,
+                pane.cursor_showing, is_pane_focused(pane), cursor.active,
             )
         }
 
         draw_gutter(pane)
         draw_modeline(pane)
-
-        // NOTE(nawe) after doing redraw, we can recalculate the
-        // amount of columns visible thanks to knowing the gutter
-        // size.
-        pane.visible_columns = (int(pane.rect.w) - int(size_of_gutter)) / int(pane.font.xadvance) - 1
 
         set_target()
         draw_texture(pane.texture, nil, &pane.rect)
@@ -272,7 +276,6 @@ update_all_pane_textures :: proc() {
 
         pane.rect = make_rect(pane_width * i32(index), 0, pane_width, pane_height)
         pane.texture = texture_create(.TARGET, i32(pane_width), i32(pane_height))
-        pane.visible_columns = int(pane.rect.w) / int(pane.font.xadvance) - 1
         pane.visible_rows = (int(pane.rect.h) / int(pane.font.line_height)) - 1
         if .Line_Wrappings in pane.flags do recalculate_line_wrappings(pane)
         flag_pane(pane, {.Need_Full_Repaint})
@@ -280,7 +283,41 @@ update_all_pane_textures :: proc() {
 }
 
 recalculate_line_wrappings :: proc(pane: ^Pane) {
-    unimplemented()
+    clear(&pane.wrapped_line_starts)
+    buffer_lines := pane.line_starts[:]
+    max_column_space := get_pane_visible_columns(pane)
+
+    for line_index := 0; line_index < len(buffer_lines) - 1; line_index += 1 {
+        start, end := get_line_boundaries(line_index, buffer_lines)
+        actual_columns := end - start
+
+        append(&pane.wrapped_line_starts, start)
+
+        if actual_columns > max_column_space {
+            count := 0
+
+            for offset := start; offset < end; offset += 1 {
+                count += 1
+
+                for is_continuation_byte(pane.contents[offset]) {
+                    offset += 1
+                }
+
+                if count > max_column_space {
+                    // go back to the beginning of the word, we only
+                    // want word wrapping.
+                    for pane.contents[offset] != ' ' && pane.contents[offset] != '\n' {
+                        offset -= 1
+                    }
+
+                    count = 0
+                    append(&pane.wrapped_line_starts, offset + 1)
+                }
+            }
+        }
+    }
+
+    append(&pane.wrapped_line_starts, len(pane.contents) + 1)
 }
 
 flag_pane :: #force_inline proc(pane: ^Pane, flags: Pane_Flags) {
@@ -336,7 +373,10 @@ prepare_cursor_for_drawing :: #force_inline proc(
     pen = starting_pen
     line_text := get_line_text_until_offset(pane, coords.row, lines, cursor.pos)
 
-    pen.x += prepare_text(font, line_text) - i32(pane.x_offset) * font.xadvance
+    pen.x += prepare_text(font, line_text)
+    if .Line_Wrappings not_in pane.flags {
+        pen.x -= i32(pane.x_offset) * font.xadvance
+    }
     pen.y += i32(coords.row - pane.y_offset) * font.character_height
     rune_behind_cursor = ' '
 
@@ -348,7 +388,7 @@ prepare_cursor_for_drawing :: #force_inline proc(
 }
 
 is_within_viewport :: #force_inline proc(pane: ^Pane, coords: Coords) -> bool {
-    last_column := pane.visible_columns + pane.x_offset
+    last_column := get_pane_visible_columns(pane) + pane.x_offset
     last_row := pane.visible_rows + pane.y_offset
     return coords.column >= pane.x_offset && coords.column < last_column &&
         coords.row >= pane.y_offset && coords.row < last_row
@@ -387,6 +427,21 @@ is_in_line :: #force_inline proc(offset: int, lines: []int, line_index: int) -> 
     return offset >= start && offset <= end
 }
 
+is_line_wrapped :: proc(pane: ^Pane, line_index: int) -> bool {
+    if .Line_Wrappings not_in pane.flags do return false
+    return get_visual_line_size(pane, line_index) != 1
+}
+
+get_visual_line_size :: proc(pane: ^Pane, test_buffer_line: int) -> int {
+    // if we're not wrapping, lines are always 1:1
+    if .Line_Wrappings not_in pane.flags do return 1
+    buffer_line_start := pane.line_starts[test_buffer_line]
+    buffer_next_line_start := pane.line_starts[test_buffer_line + 1]
+    line_index_wrapped := get_line_index(buffer_line_start, pane.wrapped_line_starts[:])
+    next_line_index_wrapped := get_line_index(buffer_next_line_start, pane.wrapped_line_starts[:])
+    return max(next_line_index_wrapped - line_index_wrapped, 1)
+}
+
 get_line_indent_count :: proc(pane: ^Pane, line_index: int, lines: []int) -> (level: int) {
     start, end := get_line_boundaries(line_index, lines)
     count_spaces := 0
@@ -419,6 +474,11 @@ get_line_index :: #force_inline proc(offset: int, lines: []int) -> (line_index: 
     for _, index in lines {
         if is_in_line(offset, lines, index) do return index
     }
+
+    // the empty buffer case will not be accomodating lines offsets,
+    // so we force a value of 0 here in those cases. For any other
+    // buffer, or as soon as that empty buffer has some content, this
+    // will be unreachable.
     return 0
 }
 
@@ -473,10 +533,21 @@ get_gutter_size :: proc(pane: ^Pane) -> (gutter_size: i32) {
 
     if settings.show_line_numbers {
         buffer_lines := pane.line_starts[:]
-        size_test_str := fmt.tprintf("{}", len(buffer_lines))
-        gutter_size = prepare_text(font, size_test_str) + MINIMUM_GUTTER_PADDING * font.em_width
+        test_str := fmt.tprintf("{}", len(buffer_lines))
+        gutter_size = i32(len(test_str)) * font.em_width + MINIMUM_GUTTER_PADDING * font.em_width
     }
 
+    return
+}
+
+get_pane_visible_columns :: proc(pane: ^Pane) -> (result: int) {
+    profiling_start("get_pane_visible_columns")
+    COLUMNS_RESERVED_FOR_PADDING :: 1
+    pane_width := int(pane.rect.w)
+    gutter_size := int(get_gutter_size(pane))
+    font_width := int(pane.font.em_width)
+    result = (pane_width - gutter_size) / font_width - COLUMNS_RESERVED_FOR_PADDING
+    profiling_end()
     return
 }
 
