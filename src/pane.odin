@@ -227,7 +227,7 @@ draw_panes :: proc() {
             start, end := get_line_boundaries(line_number, lines)
             code_line.start_offset = start
             code_line.line = pane.contents[start:end]
-            code_line.line_is_wrapped = false
+            code_line.line_is_wrapped = is_line_wrapped(pane, line_number)
 
             if end <= len(pane.buffer.tokens) {
                 code_line.tokens = pane.buffer.tokens[start:end]
@@ -287,12 +287,18 @@ recalculate_line_wrappings :: proc(pane: ^Pane) {
         return pane.contents[offset] != ' ' && pane.contents[offset] != '\n'
     }
 
+    go_back_one :: proc(pane: ^Pane, offset: ^int) {
+        offset^ -=1
+        for is_continuation_byte(pane.contents[offset^]) do offset^ -= 1
+    }
+
     // less than this per line looks weird in code, so maybe we just
     // don't wrap it.
     MINIMUM_COLUMN_SPACE_REQUIRED_TO_WRAP :: 50
+    // if we don't find a space before this, we break anyways
+    MAX_ROLLBACK_THRESHOLD :: 20
 
     buffer_lines := pane.line_starts[:]
-
     max_column_space := get_pane_visible_columns(pane)
 
     if max_column_space < MINIMUM_COLUMN_SPACE_REQUIRED_TO_WRAP {
@@ -306,29 +312,37 @@ recalculate_line_wrappings :: proc(pane: ^Pane) {
 
     for line_index := 0; line_index < len(buffer_lines) - 1; line_index += 1 {
         start, end := get_line_boundaries(line_index, buffer_lines)
-        actual_columns := end - start
+        actual_columns := utf8.rune_count_in_string(pane.contents[start:end])
 
         append(&pane.wrapped_line_starts, start)
 
-        if actual_columns > max_column_space {
+        if actual_columns >= max_column_space {
             count := 0
 
             for offset := start; offset < end; offset += 1 {
                 count += 1
 
-                for is_continuation_byte(pane.contents[offset]) {
-                    offset += 1
-                }
+                for offset < end && is_continuation_byte(pane.contents[offset]) do offset += 1
 
-                if count > max_column_space {
+                if count >= max_column_space {
                     // go back to the beginning of the word, we only
                     // want word wrapping.
+                    before_rollback_offset := offset
+                    go_back_one(pane, &offset)
+
+                    for !should_carry_over(pane, offset) do go_back_one(pane, &offset)
                     for should_carry_over(pane, offset) {
-                        offset -= 1
+                        go_back_one(pane, &offset)
+
+                        if before_rollback_offset - offset > MAX_ROLLBACK_THRESHOLD {
+                            offset = before_rollback_offset
+                            go_back_one(pane, &offset)
+                            break
+                        }
                     }
 
                     count = 0
-                    append(&pane.wrapped_line_starts, offset + 1)
+                    append(&pane.wrapped_line_starts, offset)
                 }
             }
         }
@@ -384,11 +398,12 @@ prepare_cursor_for_drawing :: #force_inline proc(
 ) -> (out_of_screen: bool, pen: Vector2, rune_behind_cursor: rune) {
     lines := get_lines_array(pane)
     coords := cursor_offset_to_coords(pane, lines, cursor.pos)
+    start, _ := get_line_boundaries(coords.row, lines)
 
     if !is_within_viewport(pane, coords) do return true, {}, ' '
 
     pen = starting_pen
-    line_text := get_line_text_until_offset(pane, coords.row, lines, cursor.pos)
+    line_text := pane.contents[start:cursor.pos]
 
     pen.x += prepare_text(font, line_text)
     if .Line_Wrappings not_in pane.flags {
@@ -452,11 +467,19 @@ is_line_wrapped :: proc(pane: ^Pane, line_index: int) -> bool {
 get_visual_line_size :: proc(pane: ^Pane, test_buffer_line: int) -> int {
     // if we're not wrapping, lines are always 1:1
     if .Line_Wrappings not_in pane.flags do return 1
-    buffer_line_start := pane.line_starts[test_buffer_line]
-    buffer_next_line_start := pane.line_starts[test_buffer_line + 1]
-    line_index_wrapped := get_line_index(buffer_line_start, pane.wrapped_line_starts[:])
-    next_line_index_wrapped := get_line_index(buffer_next_line_start, pane.wrapped_line_starts[:])
-    return max(next_line_index_wrapped - line_index_wrapped, 1)
+    buffer_lines := pane.line_starts[:]
+    wrapped_lines := pane.wrapped_line_starts[:]
+
+    // first and last lines only?
+    if len(buffer_lines) == 2 {
+        return max(len(wrapped_lines) - 2, 1)
+    } else {
+        buffer_line_start := buffer_lines[test_buffer_line]
+        buffer_next_line_start := buffer_lines[test_buffer_line + 1]
+        line_index_wrapped := get_line_index(buffer_line_start, wrapped_lines)
+        next_line_index_wrapped := get_line_index(buffer_next_line_start, wrapped_lines)
+        return max(next_line_index_wrapped - line_index_wrapped, 1)
+    }
 }
 
 get_line_indent_count :: proc(pane: ^Pane, line_index: int, lines: []int) -> (level: int) {
@@ -502,11 +525,6 @@ get_line_index :: #force_inline proc(offset: int, lines: []int) -> (line_index: 
 get_line_text :: #force_inline proc(pane: ^Pane, line_index: int, lines: []int) -> (result: string) {
     start, end := get_line_boundaries(line_index, lines)
     return pane.contents[start:end]
-}
-
-get_line_text_until_offset :: #force_inline proc(pane: ^Pane, line_index: int, lines: []int, offset: int) -> string {
-    start, _ := get_line_boundaries(line_index, lines)
-    return pane.contents[start:offset]
 }
 
 get_line_boundaries :: #force_inline proc(line_index: int, lines: []int) -> (start, end: int) {
