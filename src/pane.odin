@@ -342,7 +342,7 @@ recalculate_line_wrappings :: proc(pane: ^Pane) {
                     }
 
                     count = 0
-                    append(&pane.wrapped_line_starts, offset)
+                    append(&pane.wrapped_line_starts, offset + 1)
                 }
             }
         }
