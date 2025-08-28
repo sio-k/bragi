@@ -21,21 +21,10 @@ Command :: enum u32 {
     remove_prev_word,
     remove_next_word,
 
-    clone_cursor_start,
-    clone_cursor_end,
-    clone_cursor_up,
-    clone_cursor_down,
-    clone_cursor_left,
-    clone_cursor_right,
-    clone_cursor_prev_word,
-    clone_cursor_next_word,
-    clone_cursor_prev_paragraph,
-    clone_cursor_next_paragraph,
-    clone_cursor_beginning_of_line,
-    clone_cursor_end_of_line,
-
     indent_or_tab_stop,
 
+    clone_cursor_above,
+    clone_cursor_below,
     recenter_cursor,
     prev_cursor,
     next_cursor,
@@ -73,6 +62,7 @@ Command :: enum u32 {
     select_end_of_line,
 
     find_buffer,
+    find_command,
     find_file,
 
     close_current_buffer,
@@ -90,9 +80,9 @@ Command :: enum u32 {
     undo,
     redo,
 
-    cut_region,
+    cut_selection,
     cut_line,
-    copy_region,
+    copy_selection,
     copy_line,
     paste,
     paste_from_history,
@@ -116,13 +106,16 @@ map_keystroke_to_command :: proc(key: Key_Code, modifiers: Modifiers_Set, loc :=
         delete(mod)
     }
 
-    if .Ctrl    in modifiers do strings.write_string(&key_combo, "Ctrl-")
-    if .Command in modifiers do strings.write_string(&key_combo, "Command-")
-    if .Alt     in modifiers do strings.write_string(&key_combo, "Alt-")
-    if .Shift   in modifiers do strings.write_string(&key_combo, "Shift-")
-    if .Super   in modifiers do strings.write_string(&key_combo, "Super-")
+    if .Ctrl    in modifiers do strings.write_string(&key_combo, "CTRL-")
+    if .Command in modifiers do strings.write_string(&key_combo, "CMD-")
+    if .Alt     in modifiers do strings.write_string(&key_combo, "ALT-")
+    if .Shift   in modifiers do strings.write_string(&key_combo, "SHIFT-")
+    if .Super   in modifiers do strings.write_string(&key_combo, "SUPER-")
 
-    strings.write_string(&key_combo, input_key_code_to_string(key))
+    strings.write_string(
+            &key_combo,
+        strings.to_upper(input_key_code_to_string(key), context.temp_allocator),
+    )
     cmd_key_combo := strings.to_string(key_combo)
 
     cmd, ok := commands_map[cmd_key_combo]

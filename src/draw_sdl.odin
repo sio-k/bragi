@@ -327,7 +327,7 @@ draw_modeline :: proc(pane: ^Pane) {
 
     modeline_background: Face_Color = is_focused ? .ui_modeline_active_background : .ui_modeline_inactive_background
     modeline_foreground: Face_Color = is_focused ? .ui_modeline_active_foreground : .ui_modeline_inactive_foreground
-    modeline_highlight:  Face_Color = is_focused ? .ui_modeline_active_highlight  : .ui_modeline_inactive_highlight
+    modeline_highlight:  Face_Color = is_focused ? .ui_modeline_active_highlight  : .ui_modeline_inactive_foreground
 
     modeline_height := get_modeline_height()
     modeline_width := i32(pane.rect.w)

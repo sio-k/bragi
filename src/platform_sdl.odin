@@ -187,6 +187,12 @@ platform_update_events :: proc() {
                     mods = mods - sdl.KMOD_SHIFT
                 }
 
+                // changing the left tab to be Shift-Tab
+                if keycode == .K_LEFT_TAB {
+                    keycode = .K_TAB
+                    mods += sdl.KMOD_SHIFT
+                }
+
                 if reflect.enum_value_has_name(keycode) && !is_modifier_key {
                     kb_event := Event_Keyboard{
                         key_pressed = key,

@@ -1,0 +1,129 @@
+VERSION 1
+
+[[settings]]
+always_wrap_lines                   true
+show_trailing_whitespaces           true
+purge_trailing_whitespaces_on_save  true
+
+cursor_is_a_block                   true
+cursor_width                        2
+
+default_tab_size                    4
+default_tab_character               space
+
+show_line_numbers                   true
+maximize_window_on_start            true
+modeline_position                   bottom
+
+[[interface]]
+editor_font                         default
+editor_font_size                    18
+ui_font_size                        16
+
+background                          #050505
+foreground                          #a08563
+highlight                           #cd950c
+cursor_active                       #cd950c
+cursor_inactive                     #98a098
+selection                           #0a0b62
+search_background                   #d2d2d2
+search_foreground                   #010101
+
+code_builtin                        #875e9a
+code_comment                        #e27d51
+code_constant_value                 #5aa0b3
+code_directive                      #875e9a
+code_enum_variant                   #98a098
+code_function_name                  #a08563
+code_keyword                        #cd950c
+code_string                         #6b8e23
+code_type                           #98a098
+code_variable_name                  #a08563
+
+ui_border                           #373b41
+ui_trailing_whitespaces             #e66250
+ui_line_number_background           #050505
+ui_line_number_foreground           #373b41
+ui_line_number_current_background   #131313
+ui_line_number_current_foreground   #98a098
+ui_selection_background             #0a0b62
+ui_selection_foreground             #d2d2d2
+ui_modeline_active_background       #131313
+ui_modeline_active_foreground       #a08563
+ui_modeline_active_highlight        #cd950c
+ui_modeline_inactive_background     #010101
+ui_modeline_inactive_foreground     #616161
+
+[[keymaps]]
+quit_mode                           <Escape>
+
+find_buffer                         <Alt-b>
+find_command                        <Alt-x>
+find_file                           <Alt-f>
+
+close_current_buffer                <Alt-w>
+save_buffer                         <Alt-s>
+save_buffer_as                      <Alt-Shift-s>
+
+search_forward                      <Ctrl-s>
+search_backward                     <Ctrl-Shift-s>
+
+close_other_panes                   <Ctrl-1>
+close_this_pane                     <Ctrl-2>
+new_pane_to_the_right               <Ctrl-3>
+other_pane                          <Ctrl-o>
+
+increase_font_size                  <Ctrl-+>
+decrease_font_size                  <Ctrl-->
+reset_font_size                     <Ctrl-0>
+
+clone_cursor_above                  <Alt-Up>
+clone_cursor_below                  <Alt-Down>
+recenter_cursor                     <Ctrl-l>
+prev_cursor                         <Ctrl-Shift-Tab>
+next_cursor                         <Ctrl-Tab>
+all_cursors                         <Ctrl-Shift-a>
+
+move_start                          <Ctrl-Shift-q> <Ctrl-Home>
+move_end                            <Ctrl-Shift-e> <Ctrl-End>
+move_beginning_of_line              <Ctrl-q>
+move_end_of_line                    <Ctrl-e>
+move_up                             <Up>
+move_down                           <Down>
+move_left                           <Left>
+move_right                          <Right>
+move_prev_paragraph                 <Ctrl-Up>
+move_next_paragraph                 <Ctrl-Down>
+move_prev_word                      <Ctrl-Left>
+move_next_word                      <Ctrl-Right>
+move_prev_page                      <Ctrl-Shift-Up>   <PageUp>
+move_next_page                      <Ctrl-Shift-Down> <PageDown>
+
+select_all                          <Ctrl-a>
+select_beginning_of_line            <Ctrl-Shift-q>
+select_end_of_line                  <Ctrl-Shift-e>
+select_up                           <Shift-Up>
+select_down                         <Shift-Down>
+select_left                         <Shift-Left>
+select_right                        <Shift-Right>
+select_prev_word                    <Ctrl-Shift-Left>
+select_next_word                    <Ctrl-Shift-Right>
+
+remove_left                         <Backspace>
+remove_right                        <Delete>
+remove_right                        <Ctrl-d>
+remove_prev_word                    <Ctrl-Backspace>
+remove_next_word                    <Ctrl-Delete>
+remove_next_word                    <Ctrl-Shift-d>
+
+indent_or_tab_stop                  <Tab>
+
+cut_selection                       <Ctrl-x>
+cut_line                            <Ctrl-Shift-x>
+copy_selection                      <Ctrl-c>
+copy_line                           <Ctrl-Shift-c>
+paste                               <Ctrl-v>
+paste_from_history                  <Ctrl-Shift-v>
+
+undo                                <Ctrl-z>
+redo                                <Ctrl-Shift-z>

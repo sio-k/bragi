@@ -86,6 +86,12 @@ edit_mode_keyboard_event_handler :: proc(event: Event_Keyboard, cmd: Command) ->
         maybe_indent_and_go_to_tab_stop(pane)
         return true
 
+    case .clone_cursor_above:
+        clone_to(pane, .up)
+        return true
+    case .clone_cursor_below:
+        clone_to(pane, .down)
+        return true
     case .prev_cursor:
         if pane.cursor_selecting {
             pane.cursor_selecting = false
@@ -129,43 +135,6 @@ edit_mode_keyboard_event_handler :: proc(event: Event_Keyboard, cmd: Command) ->
         return true
     case .recenter_cursor:
         maybe_recenter_cursor(pane, true)
-        return true
-
-    case .clone_cursor_start:
-        clone_to(pane, .start)
-        return true
-    case .clone_cursor_end:
-        clone_to(pane, .end)
-        return true
-    case .clone_cursor_left:
-        clone_to(pane, .left)
-        return true
-    case .clone_cursor_right:
-        clone_to(pane, .right)
-        return true
-    case .clone_cursor_down:
-        clone_to(pane, .down)
-        return true
-    case .clone_cursor_up:
-        clone_to(pane, .up)
-        return true
-    case .clone_cursor_prev_word:
-        clone_to(pane, .prev_word)
-        return true
-    case .clone_cursor_next_word:
-        clone_to(pane, .next_word)
-        return true
-    case .clone_cursor_prev_paragraph:
-        clone_to(pane, .prev_paragraph)
-        return true
-    case .clone_cursor_next_paragraph:
-        clone_to(pane, .next_paragraph)
-        return true
-    case .clone_cursor_beginning_of_line:
-        clone_to(pane, .beginning_of_line)
-        return true
-    case .clone_cursor_end_of_line:
-        clone_to(pane, .end_of_line)
         return true
 
     case .move_start:
@@ -277,6 +246,8 @@ edit_mode_keyboard_event_handler :: proc(event: Event_Keyboard, cmd: Command) ->
     case .find_buffer:
         widget_open_find_buffer()
         return true
+    case .find_command:
+        return false
     case .find_file:
         widget_open_find_file()
         return true
@@ -406,11 +377,11 @@ edit_mode_keyboard_event_handler :: proc(event: Event_Keyboard, cmd: Command) ->
         profiling_end()
         return true
 
-    case .cut_region:
+    case .cut_selection:
     case .cut_line:
         remove_to(pane, .end_of_line)
         return true
-    case .copy_region:
+    case .copy_selection:
     case .copy_line:
     case .paste:
     case .paste_from_history:

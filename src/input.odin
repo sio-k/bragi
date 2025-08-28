@@ -337,7 +337,7 @@ Event_Window :: struct {
 }
 
 input_key_code_to_string :: #force_inline proc(key_code: Key_Code) -> string {
-    if key_code == .UNDEFINED do unreachable()
+    assert(key_code != .UNDEFINED)
     return platform_key_name(u32(key_code))
 }
 

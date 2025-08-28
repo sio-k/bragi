@@ -3,7 +3,8 @@ package main
 Color :: distinct [4]u8
 
 Face_Color :: enum u8 {
-    undefined = 0, // used internally as default 'noop'
+    // used internally to let other system decide.
+    undefined = 0,
 
     background,
     foreground,
@@ -38,7 +39,6 @@ Face_Color :: enum u8 {
     ui_modeline_active_highlight,
     ui_modeline_inactive_background,
     ui_modeline_inactive_foreground,
-    ui_modeline_inactive_highlight,
 
     debug_background,
     debug_foreground,
@@ -52,10 +52,9 @@ Modeline_Position :: enum {
     bottom, top,
 }
 
-// The settings fat struct
 Settings :: struct {
-    editor_font_size: int,
-    ui_font_size:     int,
+    editor_font_size:          int,
+    ui_font_size:              int,
 
     always_wrap_lines:         bool,
     show_trailing_whitespaces: bool,
@@ -66,38 +65,26 @@ Settings :: struct {
 
     default_tab_size:         int,
     default_tab_character:    Tab_Character,
-
     show_line_numbers:        bool,
     maximize_window_on_start: bool,
     modeline_position:        Modeline_Position,
-
-    moving_while_pressing_shift_does_select: bool,
-
-    use_emacs_keybindings: bool,
 }
 
 settings_init :: proc() {
-    DEFAULT_FONT_EDITOR_SIZE :: 24
-    DEFAULT_FONT_UI_SIZE     :: 20
-
-    settings.editor_font_size = DEFAULT_FONT_EDITOR_SIZE
-    settings.ui_font_size     = DEFAULT_FONT_UI_SIZE
-
-    settings.always_wrap_lines = true
-    settings.show_trailing_whitespaces = true
-    settings.purge_trailing_whitespaces_on_save = true
-
-    settings.default_tab_size      = 4
-    settings.default_tab_character = .space
-
+    settings.editor_font_size  = 20
+    settings.ui_font_size      = 20
     settings.cursor_is_a_block = true
     settings.cursor_width      = 2
-    settings.show_line_numbers = true
-    settings.modeline_position = .bottom
 
-    settings.moving_while_pressing_shift_does_select = true
+    settings.always_wrap_lines                  = true
+    settings.show_trailing_whitespaces          = true
+    settings.purge_trailing_whitespaces_on_save = true
 
-    settings.use_emacs_keybindings = true
+    settings.default_tab_size         = 4
+    settings.default_tab_character    = .space
+    settings.show_line_numbers        = true
+    settings.maximize_window_on_start = true
+    settings.modeline_position        = .bottom
 
     colorscheme[.background]                        = _hex_to_color(0x050505)
     colorscheme[.foreground]                        = _hex_to_color(0xa08563)
@@ -133,128 +120,86 @@ settings_init :: proc() {
 
     colorscheme[.ui_modeline_inactive_background]   = _hex_to_color(0x010101)
     colorscheme[.ui_modeline_inactive_foreground]   = _hex_to_color(0x616161)
-    colorscheme[.ui_modeline_inactive_highlight]    = _hex_to_color(0x616161)
 
     colorscheme[.debug_background] = {16, 16, 16, 150}
     colorscheme[.debug_foreground] = {255, 255, 255, 255}
 
     _settings_setup_basic_bragi_keybindings()
-
-    if settings.use_emacs_keybindings {
-        _settings_setup_emacs_keybindings()
-    }
 }
 
 // Just the default, basic, keybindings for Bragi
 @(private="file")
 _settings_setup_basic_bragi_keybindings :: proc() {
-    commands_map["Home"]  = .move_start
-    commands_map["End"]   = .move_end
-    commands_map["Left"]  = .move_left
-    commands_map["Right"] = .move_right
-    commands_map["Down"]  = .move_down
-    commands_map["Up"]    = .move_up
+    commands_map["ESCAPE"] = .quit_mode
 
-    commands_map["Shift-Left"]  = .select_left
-    commands_map["Shift-Right"] = .select_right
-    commands_map["Shift-Down"]  = .select_down
-    commands_map["Shift-Up"]    = .select_up
+    commands_map["ALT-B"] =  .find_buffer
+    commands_map["ALT-X"] =  .find_command
+    commands_map["ALT-F"] =  .find_file
 
-    commands_map["Tab"] = .indent_or_tab_stop
-    commands_map["F5"] = .toggle_line_wrappings
+    commands_map["ALT-W"] = .close_current_buffer
+    commands_map["ALT-S"] = .save_buffer
+    commands_map["ALT-SHIFT-S"] = .save_buffer_as
 
-    when ODIN_OS == .Darwin {
-        commands_map["Cmd-Left"]  = .move_prev_word
-        commands_map["Cmd-Right"] = .move_next_word
-        commands_map["Cmd-Up"]    = .move_prev_paragraph
-        commands_map["Cmd-Down"]  = .move_next_paragraph
+    commands_map["CTRL-S"] = .search_forward
+    commands_map["CTRL-SHIFT-S"] = .search_backward
 
-        commands_map["Cmd-Shift-Left"]  = .select_prev_word
-        commands_map["Cmd-Shift-Right"] = .select_next_word
-        commands_map["Cmd-Shift-Up"]    = .select_prev_paragraph
-        commands_map["Cmd-Shift-Down"]  = .select_next_paragraph
+    commands_map["CTRL-1"] = .close_other_panes
+    commands_map["CTRL-2"] = .close_this_pane
+    commands_map["CTRL-3"] = .new_pane_to_the_right
+    commands_map["CTRL-O"] = .other_pane
 
-        commands_map["Cmd-A"] = .select_all
-        commands_map["Cmd-+"] = .increase_font_size
-        commands_map["Cmd--"] = .decrease_font_size
-        commands_map["Cmd-0"] = .reset_font_size
-    } else {
-        commands_map["Ctrl-Left"]  = .move_prev_word
-        commands_map["Ctrl-Right"] = .move_next_word
-        commands_map["Ctrl-Up"]    = .move_prev_paragraph
-        commands_map["Ctrl-Down"]  = .move_next_paragraph
+    commands_map["ALT-UP"]           = .clone_cursor_above
+    commands_map["ALT-DOWN"]         = .clone_cursor_below
+    commands_map["CTRL-L"]           = .recenter_cursor
+    commands_map["CTRL-SHIFT-TAB"]   = .prev_cursor
+    commands_map["CTRL-TAB"]         = .next_cursor
+    commands_map["CTRL-SHIFT-A"]     = .all_cursors
 
-        commands_map["Ctrl-Shift-Left"]  = .select_prev_word
-        commands_map["Ctrl-Shift-Right"] = .select_next_word
-        commands_map["Ctrl-Shift-Up"]    = .select_prev_paragraph
-        commands_map["Ctrl-Shift-Down"]  = .select_next_paragraph
+    commands_map["CTRL-SHIFT-Q"]     = .move_start
+    commands_map["CTRL-SHIFT-E"]     = .move_end
+    commands_map["CTRL-Q"]           = .move_beginning_of_line
+    commands_map["CTRL-E"]           = .move_end_of_line
+    commands_map["UP"]               = .move_up
+    commands_map["DOWN"]             = .move_down
+    commands_map["LEFT"]             = .move_left
+    commands_map["RIGHT"]            = .move_right
+    commands_map["CTRL-UP"]          = .move_prev_paragraph
+    commands_map["CTRL-DOWN"]        = .move_next_paragraph
+    commands_map["CTRL-LEFT"]        = .move_prev_word
+    commands_map["CTRL-RIGHT"]       = .move_next_word
+    commands_map["CTRL-SHIFT-UP"]    = .move_prev_page
+    commands_map["PAGEUP"]           = .move_prev_page
+    commands_map["CTRL-SHIFT-DOWN"]  = .move_next_page
+    commands_map["PAGEDOWN"]         = .move_next_page
 
-        commands_map["Ctrl-A"] = .select_all
-        commands_map["Ctrl-+"] = .increase_font_size
-        commands_map["Ctrl--"] = .decrease_font_size
-        commands_map["Ctrl-0"] = .reset_font_size
-    }
-}
+    commands_map["CTRL-A"]           = .select_all
+    commands_map["CTRL-SHIFT-Q"]     = .select_beginning_of_line
+    commands_map["CTRL-SHIFT-E"]     = .select_end_of_line
+    commands_map["SHIFT-UP"]         = .select_up
+    commands_map["SHIFT-DOWN"]       = .select_down
+    commands_map["SHIFT-LEFT"]       = .select_left
+    commands_map["SHIFT-RIGHT"]      = .select_right
+    commands_map["CTRL-SHIFT-LEFT"]  = .select_prev_word
+    commands_map["CTRL-SHIFT-RIGHT"] = .select_next_word
 
-@(private="file")
-_settings_setup_emacs_keybindings :: proc() {
-    commands_map["Ctrl-X"] = .modifier
-    commands_map["Ctrl-G"] = .quit_mode
+    commands_map["BACKSPACE"]        = .remove_left
+    commands_map["DELETE"]           = .remove_right
+    commands_map["CTRL-D"]           = .remove_right
+    commands_map["CTRL-BACKSPACE"]   = .remove_prev_word
+    commands_map["CTRL-DELETE"]      = .remove_next_word
+    commands_map["CTRL-SHIFT-D"]     = .remove_next_word
 
-    commands_map["Ctrl-Space"] = .toggle_selection_mode
+    commands_map["TAB"]              = .indent_or_tab_stop
 
-    commands_map["Ctrl-X-B"]      = .find_buffer
-    commands_map["Ctrl-X-Ctrl-B"] = .find_buffer
-    commands_map["Ctrl-X-Ctrl-F"] = .find_file
-    commands_map["Ctrl-X-K"]      = .close_current_buffer
-    commands_map["Ctrl-X-Ctrl-S"] = .save_buffer
-    commands_map["Ctrl-X-Ctrl-W"] = .save_buffer_as
+    commands_map["CTRL-X"]           = .cut_selection
+    commands_map["CTRL-SHIFT-X"]     = .cut_line
+    commands_map["CTRL-C"]           = .copy_selection
+    commands_map["CTRL-SHIFT-C"]     = .copy_line
+    commands_map["CTRL-V"]           = .paste
+    commands_map["CTRL-SHIFT-V"]     = .paste_from_history
 
-    commands_map["Ctrl-S"] = .search_forward
-    commands_map["Ctrl-R"] = .search_backward
-
-    commands_map["Ctrl-X-Ctrl-P"] = .select_all
-
-    commands_map["Alt-<"]  = .move_start
-    commands_map["Alt->"]  = .move_end
-    commands_map["Ctrl-B"] = .move_left
-    commands_map["Ctrl-F"] = .move_right
-    commands_map["Ctrl-N"] = .move_down
-    commands_map["Ctrl-P"] = .move_up
-    commands_map["Alt-B"]  = .move_prev_word
-    commands_map["Alt-F"]  = .move_next_word
-    commands_map["Alt-{"]  = .move_prev_paragraph
-    commands_map["Alt-}"]  = .move_next_paragraph
-    commands_map["Alt-V"]  = .move_prev_page
-    commands_map["Ctrl-V"] = .move_next_page
-    commands_map["Ctrl-A"] = .move_beginning_of_line
-    commands_map["Ctrl-E"] = .move_end_of_line
-
-    commands_map["Alt-P"]       = .clone_cursor_up
-    commands_map["Alt-N"]       = .clone_cursor_down
-    commands_map["Alt-Shift-B"] = .clone_cursor_prev_word
-    commands_map["Alt-Shift-F"] = .clone_cursor_next_word
-
-    commands_map["Ctrl-D"] = .remove_right
-    commands_map["Alt-D"] = .remove_next_word
-    commands_map["Ctrl-K"] = .cut_line
-
-    commands_map["Ctrl-X-3"] = .new_pane_to_the_right
-    commands_map["Alt-O"]    = .other_pane
-    commands_map["Ctrl-X-O"] = .other_pane
-    commands_map["Ctrl-X-0"] = .close_this_pane
-    commands_map["Ctrl-X-1"] = .close_other_panes
-
-    commands_map["Ctrl-L"]         = .recenter_cursor
-    commands_map["Ctrl-LeftTab"]   = .prev_cursor
-    commands_map["Ctrl-Tab"]       = .next_cursor
-    commands_map["Ctrl-Shift-A"]   = .all_cursors
-
-    commands_map["Ctrl-/"] = .undo
-    commands_map["Ctrl-?"] = .redo
-
-    commands_map["Ctrl-R"] = .search_backward
-    commands_map["Ctrl-S"] = .search_forward
+    commands_map["CTRL-Z"]           = .undo
+    commands_map["CTRL-SHIFT-Z"]     = .redo
 }
 
 @(private="file")
