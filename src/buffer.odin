@@ -223,6 +223,14 @@ buffer_save :: proc(buffer: ^Buffer) {
         strings.write_string(&buffer.text_content, temp_str)
     }
 
+    if settings.purge_trailing_whitespaces_on_save {
+        changed := _purge_whitespaces_from_buffer(buffer)
+        if changed {
+            strings.builder_reset(&buffer.text_content)
+            collect_pieces_from_buffer(buffer, &buffer.text_content, nil)
+        }
+    }
+
     unflag_buffer(buffer, {.CRLF, .Modified})
 
     if !os.exists(buffer.filepath) {
@@ -243,6 +251,64 @@ buffer_save :: proc(buffer: ^Buffer) {
     }
 
     log.debugf("wrote {}", buffer.filepath)
+}
+
+@(private="file")
+_purge_whitespaces_from_buffer :: proc(buffer: ^Buffer) -> (changed: bool) {
+    whitespaces_to_remove := make([dynamic]Range, context.temp_allocator)
+    buf := buffer.text_content.buf
+    whitespace_found := false
+
+    // go byte by byte instead of rune by rune
+    for index in 0..<len(buf) {
+        b := buf[index]
+
+        if b == '\n' && whitespace_found {
+            offset := index
+            offset -= 1
+            for offset > 0 && (buf[offset-1] == ' ' || buf[offset-1] == '\t') do offset -= 1
+            append(&whitespaces_to_remove, Range{
+                start = offset,
+                end = index,
+            })
+        }
+
+        whitespace_found = b == ' ' || b == '\t'
+    }
+
+    if len(whitespaces_to_remove) > 0 {
+        changed = true
+        log.debug("removing trailing whitespaces")
+        log.debug(whitespaces_to_remove)
+    }
+
+    for to_rem, index in whitespaces_to_remove {
+        amount := to_rem.end - to_rem.start
+        remove_at(buffer, to_rem.start, amount)
+
+        for &other, other_index in whitespaces_to_remove {
+            if other_index > index {
+                other.start -= amount
+                other.end -= amount
+            }
+        }
+
+
+        // only care about updating the current pane if it has this
+        // buffer, which is probably the most common scenario. If the
+        // pane is not active we don't care about redrawing the cursor
+        // anyways, so it will stay in its position.
+        if active_pane.buffer.uuid == buffer.uuid {
+            for &cursor in active_pane.cursors {
+                if cursor.pos > to_rem.start {
+                    cursor.pos -= amount
+                    cursor.sel -= amount
+                }
+            }
+        }
+    }
+
+    return
 }
 
 @(private="file")

@@ -114,6 +114,7 @@ draw_code :: proc(pane: ^Pane, font: ^Font, pen: Vector2, code_lines: []Code_Lin
             sx -= i32(pane.x_offset) * font.xadvance
         }
         sy := pen.y + (i32(y_offset) * font.line_height)
+        ends_with_whitespace := false
 
         for r, x_offset in code.line {
             glyph := find_or_create_glyph(font, r)
@@ -137,6 +138,7 @@ draw_code :: proc(pane: ^Pane, font: ^Font, pen: Vector2, code_lines: []Code_Lin
 
             draw_texture(font.texture, &src, &dest)
             sx += glyph.xadvance
+            ends_with_whitespace = r == ' ' || r == '\t'
         }
 
         highlighted, hl := is_highlighted(highlights, code.start_offset + len(code.line))
@@ -144,6 +146,33 @@ draw_code :: proc(pane: ^Pane, font: ^Font, pen: Vector2, code_lines: []Code_Lin
         if highlighted && hl.expands_line {
             set_color(hl.background)
             draw_rect(sx, sy, window_width - sx, font.line_height, true)
+        }
+
+        if ends_with_whitespace && settings.show_trailing_whitespaces {
+            is_cursor_around := false
+            count_of_whitespaces := 0
+
+            for x := len(code.line) - 1; x >= 0; x -= 1 {
+                if code.line[x] == ' ' || code.line[x] == '\t' {
+                    count_of_whitespaces += 1
+                } else {
+                    break
+                }
+            }
+
+            actual_end_of_line := code.start_offset + len(code.line)
+            soft_end_of_line := actual_end_of_line - count_of_whitespaces
+            for cursor in pane.cursors {
+                is_cursor_around =
+                    cursor.pos >= soft_end_of_line && cursor.pos <= actual_end_of_line ||
+                    cursor.sel >= soft_end_of_line && cursor.sel <= actual_end_of_line
+                if is_cursor_around do break
+            }
+
+            if !is_cursor_around {
+                set_color(.ui_trailing_whitespace)
+                draw_rect(sx, sy, -(font.em_width * i32(count_of_whitespaces)), font.line_height, true)
+            }
         }
     }
 }

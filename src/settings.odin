@@ -26,6 +26,7 @@ Face_Color :: enum u8 {
     code_variable_name,
 
     ui_border,
+    ui_trailing_whitespace,
     ui_selection_background,
     ui_selection_foreground,
     ui_line_number_background,
@@ -56,7 +57,9 @@ Settings :: struct {
     editor_font_size: int,
     ui_font_size:     int,
 
-    always_wrap_lines:        bool,
+    always_wrap_lines:         bool,
+    show_trailing_whitespaces: bool,
+    purge_trailing_whitespaces_on_save: bool,
 
     cursor_is_a_block:        bool,
     cursor_width:             int,
@@ -81,6 +84,8 @@ settings_init :: proc() {
     settings.ui_font_size     = DEFAULT_FONT_UI_SIZE
 
     settings.always_wrap_lines = true
+    settings.show_trailing_whitespaces = true
+    settings.purge_trailing_whitespaces_on_save = true
 
     settings.default_tab_size      = 4
     settings.default_tab_character = .space
@@ -115,6 +120,7 @@ settings_init :: proc() {
     colorscheme[.code_variable_name]                = _hex_to_color(0xa08563)
 
     colorscheme[.ui_border]                         = _hex_to_color(0x373b41)
+    colorscheme[.ui_trailing_whitespace]            = _hex_to_color(0xe66250)
     colorscheme[.ui_selection_background]           = _hex_to_color(0x0a0b62)
     colorscheme[.ui_selection_foreground]           = _hex_to_color(0xd2d2d2)
     colorscheme[.ui_line_number_background]         = _hex_to_color(0x050505)
