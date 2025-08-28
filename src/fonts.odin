@@ -1,6 +1,7 @@
 package main
 
 import     "core:log"
+import     "core:math"
 import     "core:strings"
 import     "core:unicode/utf8"
 
@@ -45,7 +46,8 @@ Font :: struct {
 // NOTE(nawe) maximum number of glyphs we can cache. This should be
 // sufficient for when working with code and editing text, but it
 // might need to grow according to experience in using the editor.
-MAXIMUM_FONT_SIZE :: 120
+MAXIMUM_FONT_SIZE :: 144
+MINIMUM_FONT_SIZE :: 14
 MAX_SAFE_GLYPHS   :: 300
 BASE_TEXTURE_SIZE :: MAX_SAFE_GLYPHS * 2
 
@@ -58,7 +60,6 @@ fonts_initialized := false
 fonts_cache: [dynamic]^Font
 
 fonts_map:    map[Font_Face]^Font
-font_sizes := []i32{24, 26, 28, 32, 42, 52, 64, 81, 96, 120}
 
 fonts_init :: proc() {
     log.debug("initializing fonts")
@@ -93,19 +94,25 @@ ensure_fonts_are_initialized :: #force_inline proc() {
 initialize_font_related_stuff :: proc() {
     COMMON_CHARACTERS :: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 "
 
-    scaled_font_editor_size := i32(f32(settings.editor_font_size) * dpi_scale)
-    scaled_font_ui_size     := i32(f32(settings.ui_font_size)     * dpi_scale)
+    scaled_font_editor_size := font_to_scaled_pixels(f32(settings.editor_font_size))
+    scaled_font_ui_size     := font_to_scaled_pixels(f32(settings.ui_font_size))
+    scaled_font_small_size  := font_to_scaled_pixels(f32(settings.ui_font_size), 0.8)
 
-    fonts_map[.UI_Regular] = get_font_with_size(FONT_UI_NAME,        FONT_UI_DATA,        scaled_font_ui_size    )
-    fonts_map[.UI_Italic]  = get_font_with_size(FONT_UI_ITALIC_NAME, FONT_UI_ITALIC_DATA, scaled_font_ui_size    )
-    fonts_map[.UI_Bold]    = get_font_with_size(FONT_UI_BOLD_NAME,   FONT_UI_BOLD_DATA,   scaled_font_ui_size    )
-    fonts_map[.UI_Small]   = get_font_with_size(FONT_UI_NAME,        FONT_UI_DATA,        scaled_font_ui_size - 4)
+    fonts_map[.UI_Regular] = get_font_with_size(FONT_UI_NAME,        FONT_UI_DATA,        scaled_font_ui_size   )
+    fonts_map[.UI_Italic]  = get_font_with_size(FONT_UI_ITALIC_NAME, FONT_UI_ITALIC_DATA, scaled_font_ui_size   )
+    fonts_map[.UI_Bold]    = get_font_with_size(FONT_UI_BOLD_NAME,   FONT_UI_BOLD_DATA,   scaled_font_ui_size   )
+    fonts_map[.UI_Small]   = get_font_with_size(FONT_UI_NAME,        FONT_UI_DATA,        scaled_font_small_size)
 
     prepare_text(get_font_with_size(FONT_EDITOR_NAME, FONT_EDITOR_DATA, scaled_font_editor_size), COMMON_CHARACTERS)
     prepare_text(fonts_map[.UI_Regular], COMMON_CHARACTERS)
     prepare_text(fonts_map[.UI_Italic],  COMMON_CHARACTERS)
     prepare_text(fonts_map[.UI_Bold],    COMMON_CHARACTERS)
     prepare_text(fonts_map[.UI_Small],   "0123456789") // usually used for numbers
+}
+
+font_to_scaled_pixels :: proc(pt: f32, scale: f32 = 1.0) -> i32 {
+    result := math.ceil((f32(pt) * dpi_scale) * scale)
+    return clamp(i32(result), MINIMUM_FONT_SIZE, MAXIMUM_FONT_SIZE)
 }
 
 get_font_with_size :: proc(name: string, data: []byte, character_height: i32) -> ^Font {

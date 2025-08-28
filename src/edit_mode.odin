@@ -49,21 +49,22 @@ edit_mode_keyboard_event_handler :: proc(event: Event_Keyboard, cmd: Command) ->
     case .quit_mode: // handled globally
 
     case .increase_font_size:
-        current_index, _ := slice.binary_search(font_sizes, pane.local_font_size)
-        if current_index + 1 < len(font_sizes) {
-            pane.local_font_size = font_sizes[current_index + 1]
+        new_font_size := pane.local_font_size * 1.25
+        if new_font_size < MAXIMUM_FONT_SIZE {
+            pane.local_font_size = new_font_size
             update_all_pane_textures()
         }
         return true
     case .decrease_font_size:
-        current_index, _ := slice.binary_search(font_sizes, pane.local_font_size)
-        if current_index > 0 {
-            pane.local_font_size = font_sizes[current_index - 1]
+        new_font_size := pane.local_font_size * 0.8
+        if new_font_size > MINIMUM_FONT_SIZE {
+            pane.local_font_size = new_font_size
             update_all_pane_textures()
         }
         return true
     case .reset_font_size:
-        default_font_size := i32(settings.editor_font_size)
+        default_font_size := f32(settings.editor_font_size)
+
         if pane.local_font_size != default_font_size {
             pane.local_font_size = default_font_size
             update_all_pane_textures()

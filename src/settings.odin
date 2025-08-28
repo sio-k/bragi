@@ -71,7 +71,7 @@ Settings :: struct {
 }
 
 settings_init :: proc() {
-    settings.editor_font_size  = 20
+    settings.editor_font_size  = 24
     settings.ui_font_size      = 20
     settings.cursor_is_a_block = true
     settings.cursor_width      = 2
@@ -131,6 +131,10 @@ settings_init :: proc() {
 @(private="file")
 _settings_setup_basic_bragi_keybindings :: proc() {
     commands_map["ESCAPE"] = .quit_mode
+
+    commands_map["CTRL-+"] = .increase_font_size
+    commands_map["CTRL--"] = .decrease_font_size
+    commands_map["CTRL-0"] = .reset_font_size
 
     commands_map["ALT-B"] =  .find_buffer
     commands_map["ALT-X"] =  .find_command

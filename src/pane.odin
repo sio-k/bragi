@@ -43,7 +43,7 @@ Pane :: struct {
     regions:             [dynamic]Highlight,
     line_starts:         [dynamic]int,
     wrapped_line_starts: [dynamic]int,
-    local_font_size:     i32,
+    local_font_size:     f32,
     font:                ^Font,
     flags:               Pane_Flags,
 
@@ -96,7 +96,7 @@ pane_create :: proc(buffer: ^Buffer = nil) -> ^Pane {
         result.buffer = buffer
     }
 
-    result.local_font_size = i32(settings.editor_font_size)
+    result.local_font_size = f32(settings.editor_font_size)
 
     append(&open_panes, result)
     update_all_pane_textures()
@@ -260,7 +260,7 @@ draw_panes :: proc() {
 }
 
 update_pane_font :: #force_inline proc(pane: ^Pane) {
-    scaled_character_height := i32(f32(pane.local_font_size) * dpi_scale)
+    scaled_character_height := font_to_scaled_pixels(pane.local_font_size)
     pane.font = get_font_with_size(FONT_EDITOR_NAME, FONT_EDITOR_DATA, scaled_character_height)
 }
 
