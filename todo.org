@@ -17,3 +17,7 @@ Bug/Cursor+Indent: when using a closing token, like `}` but already at the start
 Improvement/Window Resizing And System Display Scale: if the user changes their display scale or is currently resizing the window, we need to reconfigure things accordingly. Currently we're resizing things every frame and also this affects the DPI scale. Make this consistent before re-enabling it.
 
 Improvement/Speed/Piece Table Cache Absolute Line Starts And Buffer Positions: in order to not recreate the line offsets and collect pieces for when we do multi-line effect operations, making the Piece Table cache the absolute line offsets would make all this work easier and faster. Current speeds aren't that bad but we can make it a LOT better.
+
+  ------------------
+ /   QUICK ONES   /
+------------------

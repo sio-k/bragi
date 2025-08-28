@@ -283,9 +283,26 @@ update_all_pane_textures :: proc() {
 }
 
 recalculate_line_wrappings :: proc(pane: ^Pane) {
-    clear(&pane.wrapped_line_starts)
+    should_carry_over :: proc(pane: ^Pane, offset: int) -> bool {
+        return pane.contents[offset] != ' ' && pane.contents[offset] != '\n'
+    }
+
+    // less than this per line looks weird in code, so maybe we just
+    // don't wrap it.
+    MINIMUM_COLUMN_SPACE_REQUIRED_TO_WRAP :: 50
+
     buffer_lines := pane.line_starts[:]
+
     max_column_space := get_pane_visible_columns(pane)
+
+    if max_column_space < MINIMUM_COLUMN_SPACE_REQUIRED_TO_WRAP {
+        delete(pane.wrapped_line_starts)
+        pane.wrapped_line_starts = slice.clone_to_dynamic(pane.line_starts[:])
+        return
+    }
+
+    clear(&pane.wrapped_line_starts)
+    reserve(&pane.wrapped_line_starts, len(buffer_lines))
 
     for line_index := 0; line_index < len(buffer_lines) - 1; line_index += 1 {
         start, end := get_line_boundaries(line_index, buffer_lines)
@@ -306,7 +323,7 @@ recalculate_line_wrappings :: proc(pane: ^Pane) {
                 if count > max_column_space {
                     // go back to the beginning of the word, we only
                     // want word wrapping.
-                    for pane.contents[offset] != ' ' && pane.contents[offset] != '\n' {
+                    for should_carry_over(pane, offset) {
                         offset -= 1
                     }
 

@@ -18,6 +18,8 @@ Command :: enum u32 {
 
     remove_left,
     remove_right,
+    remove_prev_word,
+    remove_next_word,
 
     clone_cursor_start,
     clone_cursor_end,

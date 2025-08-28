@@ -230,6 +230,7 @@ _settings_setup_emacs_keybindings :: proc() {
     commands_map["Alt-Shift-F"] = .clone_cursor_next_word
 
     commands_map["Ctrl-D"] = .remove_right
+    commands_map["Alt-D"] = .remove_next_word
     commands_map["Ctrl-K"] = .cut_line
 
     commands_map["Ctrl-X-3"] = .new_pane_to_the_right

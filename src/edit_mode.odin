@@ -263,8 +263,16 @@ edit_mode_keyboard_event_handler :: proc(event: Event_Keyboard, cmd: Command) ->
 
     case .remove_left:
         remove_to(pane, .left)
+        return true
     case .remove_right:
         remove_to(pane, .right)
+        return true
+    case .remove_prev_word:
+        remove_to(pane, .prev_word)
+        return true
+    case .remove_next_word:
+        remove_to(pane, .next_word)
+        return true
 
     case .find_buffer:
         widget_open_find_buffer()
@@ -502,11 +510,20 @@ remove_to :: proc(pane: ^Pane, t: Translation) -> (total_amount_of_removed_chara
     profiling_start("removing text")
     copy_cursors(pane, pane.buffer)
 
+    buffer_lines := pane.line_starts[:]
+
     for &cursor in pane.cursors {
         if !cursor.active do continue
 
-        if !has_selection(cursor) {
-            cursor.pos, _ = translate_position(pane, cursor.pos, t)
+        line_index := get_line_index(cursor.pos, buffer_lines)
+        _, end := get_line_boundaries(line_index, buffer_lines)
+
+        if t == .end_of_line && cursor.pos == end {
+            cursor.pos, _ = translate_position(pane, cursor.pos, .right)
+        } else {
+            if !has_selection(cursor) {
+                cursor.pos, _ = translate_position(pane, cursor.pos, t)
+            }
         }
     }
 
