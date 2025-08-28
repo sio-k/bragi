@@ -436,7 +436,7 @@ draw_highlighted_text :: proc(
 
         if highlighted && !selected {
             set_color(highlight_bg_face)
-            draw_rect(sx, sy, glyph.w, glyph.h)
+            draw_rect(sx, sy, glyph.xadvance, glyph.h)
             set_color(highlight_fg_face, font.texture)
         }
 

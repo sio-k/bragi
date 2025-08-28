@@ -882,6 +882,7 @@ _indent_single_line :: proc(buffer: ^Buffer, text: string, line_index: int, line
 @(private="file")
 _maybe_merge_overlapping_cursors :: proc(pane: ^Pane) {
     if len(pane.cursors) < 2 do return
+    sort_cursors_by_offset(pane)
 
     for i in 0..<len(pane.cursors) {
         for j in 1..<len(pane.cursors) {
