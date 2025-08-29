@@ -221,6 +221,19 @@ platform_update_events :: proc() {
     profiling_end()
 }
 
+platform_set_clipboard_text :: proc(text: string) {
+    cstr := strings.clone_to_cstring(text, context.temp_allocator)
+    success := sdl.SetClipboardText(cstr)
+    if !success do log.fatalf("failed to copy text '{}'", text)
+}
+
+platform_get_clipboard_text :: proc() -> (result: string) {
+    data := sdl.GetClipboardText()
+    result = strings.clone(string(cstring(data)), context.temp_allocator)
+    sdl.free(data)
+    return
+}
+
 platform_key_name :: proc(key: u32) -> string {
     return string(sdl.GetKeyName(sdl.Keycode(key)))
 }
