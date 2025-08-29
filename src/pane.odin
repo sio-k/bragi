@@ -141,37 +141,6 @@ update_active_pane :: proc() {
         flag_pane(pane, {.Need_Full_Repaint})
     }
 
-    {
-        active_cursor := get_first_active_cursor(pane)
-        lines := get_lines_array(pane)
-        coords := cursor_offset_to_coords(pane, lines, active_cursor.pos)
-        has_scrolled := false
-        visible_columns := get_pane_visible_columns(pane)
-
-        if .Line_Wrappings not_in pane.flags {
-            for coords.column < pane.x_offset {
-                pane.x_offset -= 1
-                has_scrolled = true
-            }
-
-            for coords.column >= visible_columns + pane.x_offset {
-                pane.x_offset += 1
-                has_scrolled = true
-            }
-        }
-
-        for coords.row < pane.y_offset {
-            pane.y_offset -= 1
-            has_scrolled = true
-        }
-
-        for coords.row >= pane.visible_rows + pane.y_offset {
-            pane.y_offset += 1
-            has_scrolled = true
-        }
-
-        if has_scrolled do flag_pane(pane, {.Need_Full_Repaint})
-    }
     profiling_end()
 }
 

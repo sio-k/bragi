@@ -111,6 +111,7 @@ edit_mode_keyboard_event_handler :: proc(event: Event_Keyboard, cmd: Command) ->
         current_cursor_index -= 1
         if current_cursor_index < 0 do current_cursor_index = len(pane.cursors) - 1
         pane.cursors[current_cursor_index].active = true
+        _maybe_scroll_pane_to_cursor_view(pane)
         return true
     case .next_cursor:
         if pane.cursor_selecting {
@@ -130,6 +131,7 @@ edit_mode_keyboard_event_handler :: proc(event: Event_Keyboard, cmd: Command) ->
         current_cursor_index += 1
         if current_cursor_index > len(pane.cursors) - 1 do current_cursor_index = 0
         pane.cursors[current_cursor_index].active = true
+        _maybe_scroll_pane_to_cursor_view(pane)
         return true
     case .all_cursors:
         for &cursor in pane.cursors do cursor.active = true
@@ -463,6 +465,7 @@ move_to :: proc(pane: ^Pane, t: Translation, cursor_to_move: ^Cursor = nil) {
     }
 
     _maybe_merge_overlapping_cursors(pane)
+    _maybe_scroll_pane_to_cursor_view(pane)
 }
 
 select_to :: proc(pane: ^Pane, t: Translation, cursor_to_select: ^Cursor = nil) {
@@ -732,6 +735,39 @@ editor_toggle_selection :: proc(pane: ^Pane, force_reset := false) {
             cursor.active = true
         }
     }
+}
+
+@(private="file")
+_maybe_scroll_pane_to_cursor_view :: proc(pane: ^Pane) {
+    active_cursor := get_first_active_cursor(pane)
+    lines := get_lines_array(pane)
+    coords := cursor_offset_to_coords(pane, lines, active_cursor.pos)
+    has_scrolled := false
+    visible_columns := get_pane_visible_columns(pane)
+
+    if .Line_Wrappings not_in pane.flags {
+        for coords.column < pane.x_offset {
+            pane.x_offset -= 1
+            has_scrolled = true
+        }
+
+        for coords.column >= visible_columns + pane.x_offset {
+            pane.x_offset += 1
+            has_scrolled = true
+        }
+    }
+
+    for coords.row < pane.y_offset {
+        pane.y_offset -= 1
+        has_scrolled = true
+    }
+
+    for coords.row >= pane.visible_rows + pane.y_offset {
+        pane.y_offset += 1
+        has_scrolled = true
+    }
+
+    if has_scrolled do flag_pane(pane, {.Need_Full_Repaint})
 }
 
 @(private="file")
