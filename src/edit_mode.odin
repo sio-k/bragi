@@ -383,13 +383,19 @@ edit_mode_keyboard_event_handler :: proc(event: Event_Keyboard, cmd: Command) ->
     case .cut_selection:
         copy_selected_text(pane, true)
         remove_selections(pane)
+        return true
     case .cut_line:
-        remove_to(pane, .end_of_line)
+        select_to(pane, .end_of_line)
+        copy_selected_text(pane, true)
+        remove_selections(pane)
         return true
     case .copy_selection:
         copy_selected_text(pane)
         return true
     case .copy_line:
+        select_to(pane, .end_of_line)
+        copy_selected_text(pane)
+        return true
     case .paste:
         text := platform_get_clipboard_text()
         if len(text) > 0 do insert_at_points(pane, text)
