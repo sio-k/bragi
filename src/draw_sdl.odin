@@ -148,7 +148,8 @@ draw_code :: proc(pane: ^Pane, font: ^Font, pen: Vector2, code_lines: []Code_Lin
             draw_rect(sx, sy, window_width - sx, font.line_height, true)
         }
 
-        if ends_with_whitespace && settings.show_trailing_whitespaces {
+        if settings.show_trailing_whitespaces {
+            if code.line_is_wrapped || !ends_with_whitespace do continue
             is_cursor_around := false
             count_of_whitespaces := 0
 

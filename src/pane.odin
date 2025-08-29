@@ -461,10 +461,11 @@ is_in_line :: #force_inline proc(offset: int, lines: []int, line_index: int) -> 
 
 is_line_wrapped :: proc(pane: ^Pane, line_index: int) -> bool {
     if .Line_Wrappings not_in pane.flags do return false
-    return get_visual_line_size(pane, line_index) != 1
+    start, _ := get_line_boundaries(line_index, pane.wrapped_line_starts[:])
+    return slice.contains(pane.line_starts[:], start)
 }
 
-get_visual_line_size :: proc(pane: ^Pane, test_buffer_line: int) -> int {
+get_visual_line_size :: proc(pane: ^Pane, test_buffer_line: int, loc := #caller_location) -> int {
     // if we're not wrapping, lines are always 1:1
     if .Line_Wrappings not_in pane.flags do return 1
     buffer_lines := pane.line_starts[:]
@@ -474,8 +475,10 @@ get_visual_line_size :: proc(pane: ^Pane, test_buffer_line: int) -> int {
     if len(buffer_lines) == 2 {
         return max(len(wrapped_lines) - 2, 1)
     } else {
-        buffer_line_start := buffer_lines[test_buffer_line]
-        buffer_next_line_start := buffer_lines[test_buffer_line + 1]
+        current_line_safe := min(test_buffer_line, len(buffer_lines) - 1)
+        next_line_safe := min(test_buffer_line + 1, len(buffer_lines) - 1)
+        buffer_line_start := buffer_lines[current_line_safe]
+        buffer_next_line_start := buffer_lines[next_line_safe]
         line_index_wrapped := get_line_index(buffer_line_start, wrapped_lines)
         next_line_index_wrapped := get_line_index(buffer_next_line_start, wrapped_lines)
         return max(next_line_index_wrapped - line_index_wrapped, 1)
