@@ -111,7 +111,7 @@ edit_mode_keyboard_event_handler :: proc(event: Event_Keyboard, cmd: Command) ->
         current_cursor_index -= 1
         if current_cursor_index < 0 do current_cursor_index = len(pane.cursors) - 1
         pane.cursors[current_cursor_index].active = true
-        _maybe_scroll_pane_to_cursor_view(pane)
+        maybe_scroll_pane_to_cursor_view(pane)
         return true
     case .next_cursor:
         if pane.cursor_selecting {
@@ -131,7 +131,7 @@ edit_mode_keyboard_event_handler :: proc(event: Event_Keyboard, cmd: Command) ->
         current_cursor_index += 1
         if current_cursor_index > len(pane.cursors) - 1 do current_cursor_index = 0
         pane.cursors[current_cursor_index].active = true
-        _maybe_scroll_pane_to_cursor_view(pane)
+        maybe_scroll_pane_to_cursor_view(pane)
         return true
     case .all_cursors:
         for &cursor in pane.cursors do cursor.active = true
@@ -465,7 +465,7 @@ move_to :: proc(pane: ^Pane, t: Translation, cursor_to_move: ^Cursor = nil) {
     }
 
     _maybe_merge_overlapping_cursors(pane)
-    _maybe_scroll_pane_to_cursor_view(pane)
+    maybe_scroll_pane_to_cursor_view(pane)
 }
 
 select_to :: proc(pane: ^Pane, t: Translation, cursor_to_select: ^Cursor = nil) {
@@ -485,7 +485,7 @@ remove_to :: proc(pane: ^Pane, t: Translation) -> (total_amount_of_removed_chara
     profiling_start("removing text")
     copy_cursors(pane, pane.buffer)
 
-    buffer_lines := pane.line_starts[:]
+    buffer_lines := pane.buffer.line_starts[:]
 
     for &cursor in pane.cursors {
         if !cursor.active do continue
@@ -553,7 +553,7 @@ insert_at_points :: proc(pane: ^Pane, text: string) {
     remove_selections(pane)
 
     if maybe_should_reindent {
-        buffer_lines := pane.line_starts[:]
+        buffer_lines := pane.buffer.line_starts[:]
 
         for cursor in pane.cursors {
             append(&temp_lines_to_indent, get_line_index(cursor.pos, buffer_lines))
@@ -598,7 +598,7 @@ insert_newlines_and_indent :: proc(pane: ^Pane) {
     // remove selection may have taken part of our lines, so we need
     // to make sure we remap then before we ask for reindent
     temp_lines_to_indent := make([dynamic]int, context.temp_allocator)
-    temp_lines_array := make([dynamic]int, 1, context.temp_allocator)
+    temp_lines_array := make([dynamic]int, context.temp_allocator)
 
     if should_do_electric_indent(pane.buffer) {
         collect_pieces_from_buffer(pane.buffer, nil, &temp_lines_array)
@@ -651,7 +651,7 @@ maybe_indent_and_go_to_tab_stop :: proc(pane: ^Pane) {
     }
 
     temp_lines_to_indent := make([dynamic]int, context.temp_allocator)
-    buffer_lines := pane.line_starts[:]
+    buffer_lines := pane.buffer.line_starts[:]
 
     for &cursor in pane.cursors {
         if !cursor.active do continue
@@ -738,39 +738,6 @@ editor_toggle_selection :: proc(pane: ^Pane, force_reset := false) {
 }
 
 @(private="file")
-_maybe_scroll_pane_to_cursor_view :: proc(pane: ^Pane) {
-    active_cursor := get_first_active_cursor(pane)
-    lines := get_lines_array(pane)
-    coords := cursor_offset_to_coords(pane, lines, active_cursor.pos)
-    has_scrolled := false
-    visible_columns := get_pane_visible_columns(pane)
-
-    if .Line_Wrappings not_in pane.flags {
-        for coords.column < pane.x_offset {
-            pane.x_offset -= 1
-            has_scrolled = true
-        }
-
-        for coords.column >= visible_columns + pane.x_offset {
-            pane.x_offset += 1
-            has_scrolled = true
-        }
-    }
-
-    for coords.row < pane.y_offset {
-        pane.y_offset -= 1
-        has_scrolled = true
-    }
-
-    for coords.row >= pane.visible_rows + pane.y_offset {
-        pane.y_offset += 1
-        has_scrolled = true
-    }
-
-    if has_scrolled do flag_pane(pane, {.Need_Full_Repaint})
-}
-
-@(private="file")
 _on_indent_realign_active_pane_cursors :: proc(prev_offset, new_offset, amount: int) {
     pane := active_pane
 
@@ -791,7 +758,7 @@ _indent_multi_line :: proc(buffer: ^Buffer, lines_to_indent: []int, after_single
         // somewhat slow here, but we need to reconstruct some lines
         // in order to figure out how much we need to
         // indent. Hopefully we don't have to go to the end of the file.
-        temp_line_starts := make([dynamic]int, 1, context.temp_allocator)
+        temp_line_starts := make([dynamic]int, context.temp_allocator)
         contents := strings.builder_make(context.temp_allocator)
         collect_pieces_from_buffer(buffer, &contents, &temp_line_starts)
 

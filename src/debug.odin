@@ -47,7 +47,7 @@ debug_draw :: proc() {
     buffer_info_str := fmt.tprintf(
         "Name: {}\nLength: {}\nPieces: {}\nLines: {}\n",
         pane.buffer.name, len(pane.contents), len(pane.buffer.pieces),
-        len(pane.line_starts),
+        len(pane.buffer.line_starts),
     )
     pen = draw_text(font_regular, pen, buffer_info_str)
 

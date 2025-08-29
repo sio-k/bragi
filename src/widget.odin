@@ -430,7 +430,7 @@ widget_keyboard_event_handler :: proc(event: Event_Keyboard, cmd: Command) -> (h
         case .move_right, .select_right: {
             cursor.pos += 1
             for cursor.pos < len(prompt) && is_continuation_byte(prompt[cursor.pos]) do cursor.pos += 1
-            cursor.pos = min(cursor.pos, len(prompt) - 1)
+            cursor.pos = min(cursor.pos, len(prompt))
             if cmd != .select_right && !global_widget.cursor_selecting {
                 cursor.sel = cursor.pos
             }
@@ -452,7 +452,6 @@ widget_keyboard_event_handler :: proc(event: Event_Keyboard, cmd: Command) -> (h
             }
             return true
         }
-
         case .cut_line: {
             cursor.sel = len(prompt)
             _remove_selection()
@@ -883,6 +882,7 @@ _search_in_buffer_widget_update :: proc() {
     // find the closest offset
     pane_cursor := get_first_active_cursor(active_pane)
     smallest_diff := len(active_pane.contents)
+    global_widget.y_offset = 0
 
     for result, index in global_widget.view_results {
         result_offset := result.value.(int)
@@ -917,17 +917,17 @@ update_and_draw_widget :: proc() {
         global_widget.cursor_blink_timer = time.tick_now()
     }
 
+    switch global_widget.action {
+    case .Find_Buffer:               _find_buffer_widget_update()
+    case .Find_File, .Save_File_As:  _find_or_save_file_widget_update()
+    case .Search_In_Buffer:          _search_in_buffer_widget_update()
+    }
+
     for cursor.index > WIDGET_HEIGHT_IN_ROWS - 2 + global_widget.y_offset {
         global_widget.y_offset += 1
     }
     for cursor.index < global_widget.y_offset do global_widget.y_offset -= 1
     if  cursor.index <= 0 do global_widget.y_offset = 0
-
-    switch global_widget.action {
-    case .Find_Buffer:              _find_buffer_widget_update()
-    case .Find_File, .Save_File_As: _find_or_save_file_widget_update()
-    case .Search_In_Buffer:         _search_in_buffer_widget_update()
-    }
 
     set_target(global_widget.texture)
     set_color(.background)

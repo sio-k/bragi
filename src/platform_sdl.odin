@@ -21,6 +21,7 @@ renderer: ^sdl.Renderer
 _ :: filepath
 
 platform_init :: proc() {
+    profiling_start("init SDL")
     WINDOW_FLAGS  :: sdl.WindowFlags{.RESIZABLE, .HIGH_PIXEL_DENSITY}
 
     METADATA :: []struct{key, value: cstring}{
@@ -104,6 +105,7 @@ platform_init :: proc() {
     if !os.is_dir(base_working_dir) {
         log.errorf("base_working_dir '{}' is not a valid dir", base_working_dir)
     }
+    profiling_end()
 }
 
 platform_destroy :: proc() {

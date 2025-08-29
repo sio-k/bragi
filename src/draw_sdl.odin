@@ -99,6 +99,7 @@ set_target :: #force_inline proc(target: ^Texture = nil) {
 }
 
 draw_code :: proc(pane: ^Pane, font: ^Font, pen: Vector2, code_lines: []Code_Line, highlights: []Highlight = {}) {
+    profiling_start("draw code for pane")
     is_highlighted :: proc(highlights: []Highlight, offset: int) -> (bool, Highlight) {
         for h in highlights {
             if h.start != h.end && offset >= h.start && offset < h.end {
@@ -187,9 +188,11 @@ draw_code :: proc(pane: ^Pane, font: ^Font, pen: Vector2, code_lines: []Code_Lin
             }
         }
     }
+    profiling_end()
 }
 
 draw_cursor :: proc(font: ^Font, pen: Vector2, rune_behind: rune, visible, filled, active: bool) {
+    profiling_start("draw cursor")
     cursor_height := font.character_height
     cursor_width := font.em_width if settings.cursor_is_a_block else i32(settings.cursor_width)
 
@@ -214,10 +217,14 @@ draw_cursor :: proc(font: ^Font, pen: Vector2, rune_behind: rune, visible, fille
     } else {
         draw_rect(pen.x, pen.y, cursor_width, cursor_height, false)
     }
+    profiling_end()
 }
 
 draw_gutter :: proc(pane: ^Pane) {
-    draw_gutter_extension :: proc(pane: ^Pane, font: ^Font, pen: Vector2, line_number: int, lines: []int) {
+    profiling_start("draw gutter for pane")
+    draw_gutter_extension :: proc(
+        pane: ^Pane, font: ^Font, pen: Vector2, line_number: int, lines: []int,
+    ) {
         if .Line_Wrappings in pane.flags do return
         left_indicator, right_indicator := get_gutter_indicators(font)
         start, end := get_line_boundaries(line_number, lines)
@@ -239,7 +246,7 @@ draw_gutter :: proc(pane: ^Pane) {
     regular_character_height := pane.font.line_height
     line_number_character_height := font.line_height
     y_offset_for_centering := (regular_character_height - line_number_character_height)/2
-    buffer_lines := pane.line_starts[:]
+    buffer_lines := pane.buffer.line_starts[:]
     first_visible_row := pane.y_offset
     last_visible_row := pane.y_offset + pane.visible_rows
     last_line := len(buffer_lines) - 1
@@ -327,10 +334,12 @@ draw_gutter :: proc(pane: ^Pane) {
         draw_line(0, 0, 0, pane_height)
     }
 
+    profiling_end()
     return
 }
 
 draw_modeline :: proc(pane: ^Pane) {
+    profiling_start("drawing modeline")
     is_focused := is_pane_focused(pane)
 
     font := fonts_map[.UI_Regular]
@@ -380,7 +389,7 @@ draw_modeline :: proc(pane: ^Pane) {
     set_color(modeline_foreground, font.texture)
     if len(pane.cursors) == 1 {
         // using the buffer lines for these coords, we want to know the real position of the cursor
-        coords := cursor_offset_to_coords(pane, pane.line_starts[:], pane.cursors[0].pos)
+        coords := cursor_offset_to_coords(pane, pane.buffer.line_starts[:], pane.cursors[0].pos)
         left_pen = draw_text(font, left_pen, fmt.tprintf(" ({}, {}) ", coords.row + 1, coords.column))
     } else {
         // TODO(nawe) maybe show the position of the active cursor
@@ -395,6 +404,7 @@ draw_modeline :: proc(pane: ^Pane) {
         right_pen.x -= major_mode_width + font_bold.em_width
         draw_text(font_bold, right_pen, major_mode_name)
     }
+    profiling_end()
 }
 
 draw_rect :: #force_inline proc(x, y, w, h: i32, fill := true) {

@@ -16,6 +16,8 @@ URL     :: "https://github.com/nawetimebomb/bragi"
 VERSION :: "0.01"
 ICON    :: #load(RUN_TREE_DIR + "/icons/bragi-icon_large.png")
 
+BRAGI_PROFILING :: #config(BRAGI_PROFILING, false) // inits profiling on application start
+
 RUN_TREE_DIR :: "../res"
 
 FONT_EDITOR_NAME    :: "chivo-mono.ttf"
@@ -90,6 +92,10 @@ main :: proc() {
             mem.tracking_allocator_clear(a)
             return err
         }
+    }
+
+    when BRAGI_PROFILING {
+        profiling_init()
     }
 
     bragi_allocator = context.allocator
@@ -280,6 +286,10 @@ main :: proc() {
     delete(last_search_term)
 
     platform_destroy()
+
+    when BRAGI_PROFILING {
+        profiling_destroy()
+    }
 
     when ODIN_DEBUG {
         reset_tracking_allocator(&tracking_allocator)

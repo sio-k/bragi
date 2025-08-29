@@ -4,6 +4,7 @@ import "core:encoding/uuid"
 import "core:fmt"
 import "core:log"
 import "core:slice"
+import "core:strings"
 import "core:time"
 import "core:unicode/utf8"
 
@@ -41,7 +42,6 @@ Pane :: struct {
     buffer:              ^Buffer,
     contents:            string,
     regions:             [dynamic]Highlight,
-    line_starts:         [dynamic]int,
     wrapped_line_starts: [dynamic]int,
     local_font_size:     f32,
     font:                ^Font,
@@ -107,7 +107,6 @@ pane_destroy :: proc(pane: ^Pane) {
     pane.buffer = nil
     delete(pane.regions)
     delete(pane.cursors)
-    delete(pane.line_starts)
     delete(pane.wrapped_line_starts)
     free(pane)
 }
@@ -267,12 +266,12 @@ recalculate_line_wrappings :: proc(pane: ^Pane) {
     // if we don't find a space before this, we break anyways
     MAX_ROLLBACK_THRESHOLD :: 20
 
-    buffer_lines := pane.line_starts[:]
+    buffer_lines := pane.buffer.line_starts[:]
     max_column_space := get_pane_visible_columns(pane)
 
     if max_column_space < MINIMUM_COLUMN_SPACE_REQUIRED_TO_WRAP {
         delete(pane.wrapped_line_starts)
-        pane.wrapped_line_starts = slice.clone_to_dynamic(pane.line_starts[:])
+        pane.wrapped_line_starts = slice.clone_to_dynamic(pane.buffer.line_starts[:])
         return
     }
 
@@ -395,7 +394,7 @@ is_within_viewport :: #force_inline proc(pane: ^Pane, coords: Coords) -> bool {
         coords.row >= pane.y_offset && coords.row < last_row
 }
 
-cursor_offset_to_coords :: #force_inline proc(pane: ^Pane, lines: []int, offset: int) -> (result: Coords) {
+cursor_offset_to_coords :: proc(pane: ^Pane, lines: []int, offset: int) -> (result: Coords) {
     result.row = get_line_index(offset, lines)
     start, end := get_line_boundaries(result.row, lines)
     buf := pane.contents[start:end]
@@ -410,7 +409,7 @@ cursor_offset_to_coords :: #force_inline proc(pane: ^Pane, lines: []int, offset:
     return
 }
 
-cursor_coords_to_offset :: #force_inline proc(pane: ^Pane, lines: []int, coords: Coords) -> (offset: int) {
+cursor_coords_to_offset :: proc(pane: ^Pane, lines: []int, coords: Coords) -> (offset: int) {
     offset = lines[coords.row]
     column := coords.column
     buf := pane.contents
@@ -431,13 +430,13 @@ is_in_line :: #force_inline proc(offset: int, lines: []int, line_index: int) -> 
 is_line_wrapped :: proc(pane: ^Pane, line_index: int) -> bool {
     if .Line_Wrappings not_in pane.flags do return false
     start, _ := get_line_boundaries(line_index, pane.wrapped_line_starts[:])
-    return slice.contains(pane.line_starts[:], start)
+    return slice.contains(pane.buffer.line_starts[:], start)
 }
 
 get_visual_line_size :: proc(pane: ^Pane, test_buffer_line: int, loc := #caller_location) -> int {
     // if we're not wrapping, lines are always 1:1
     if .Line_Wrappings not_in pane.flags do return 1
-    buffer_lines := pane.line_starts[:]
+    buffer_lines := pane.buffer.line_starts[:]
     wrapped_lines := pane.wrapped_line_starts[:]
 
     // first and last lines only?
@@ -510,7 +509,7 @@ get_lines_array :: #force_inline proc(pane: ^Pane) -> []int {
     if .Line_Wrappings in pane.flags {
         return pane.wrapped_line_starts[:]
     } else {
-        return pane.line_starts[:]
+        return pane.buffer.line_starts[:]
     }
 }
 
@@ -539,7 +538,7 @@ get_gutter_size :: proc(pane: ^Pane) -> (gutter_size: i32) {
     gutter_size = font.em_width
 
     if settings.show_line_numbers {
-        buffer_lines := pane.line_starts[:]
+        buffer_lines := pane.buffer.line_starts[:]
         test_str := fmt.tprintf("{}", len(buffer_lines))
         gutter_size = i32(len(test_str)) * font.em_width + MINIMUM_GUTTER_PADDING * font.em_width
     }
@@ -565,6 +564,7 @@ get_modeline_height :: #force_inline proc() -> i32 {
 }
 
 switch_to_buffer :: proc(pane: ^Pane, buffer: ^Buffer) {
+    profiling_start("switching buffers in pane")
     assert(buffer != nil)
     clear(&pane.regions)
     if pane.buffer != nil do copy_cursors(pane, pane.buffer)
@@ -578,7 +578,50 @@ switch_to_buffer :: proc(pane: ^Pane, buffer: ^Buffer) {
     }
 
     pane.buffer = buffer
-    flag_buffer(buffer, {.Dirty})
+    pane.contents = strings.to_string(buffer.text_content)
+    if .Line_Wrappings in pane.flags do recalculate_line_wrappings(pane)
+    maybe_scroll_pane_to_cursor_view(pane)
+    profiling_end()
+}
+
+maybe_scroll_pane_to_cursor_view :: proc(pane: ^Pane) {
+    lines := get_lines_array(pane)
+
+    if len(lines) < pane.visible_rows {
+        pane.y_offset = 0
+        return
+    }
+
+    sort_cursors_by_offset(pane)
+
+    active_cursor := get_first_active_cursor(pane)
+    coords := cursor_offset_to_coords(pane, lines, active_cursor.pos)
+    has_scrolled := false
+    visible_columns := get_pane_visible_columns(pane)
+
+    if .Line_Wrappings not_in pane.flags {
+        for coords.column < pane.x_offset {
+            pane.x_offset -= 1
+            has_scrolled = true
+        }
+
+        for coords.column >= visible_columns + pane.x_offset {
+            pane.x_offset += 1
+            has_scrolled = true
+        }
+    }
+
+    for coords.row < pane.y_offset {
+        pane.y_offset -= 1
+        has_scrolled = true
+    }
+
+    for coords.row >= pane.visible_rows + pane.y_offset {
+        pane.y_offset += 1
+        has_scrolled = true
+    }
+
+    if has_scrolled do flag_pane(pane, {.Need_Full_Repaint})
 }
 
 translate_position :: proc(pane: ^Pane, pos: int, t: Translation, max_column := -1) -> (result, last_column: int) {

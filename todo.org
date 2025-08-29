@@ -4,7 +4,7 @@ Bug/Cursors: while in multiple cursors, and having a cursor at the end of a line
 
 Improvement/Buffer: make the buffer piece table to actually store the line starts and cache them. This is a big improvement for bigger files as after the first load we might just not need to fully calculate lines again. Maybe we can also cache the pieces that have changed.
 
-Improvement/Search: save the search history, or at least the last term that was used for searching so the user can press search twice and automatically populate.
+Improvements/Search: make search interactive. For example, allow a command to create a cursor on each search result.
 
 Feature/Marks: save pane/buffer marks for some user actions. Show the existing marks on the pane fringe
 
@@ -18,6 +18,7 @@ Improvement/Speed/Piece Table Cache Absolute Line Starts And Buffer Positions: i
 
 Bug/Line Wrappings: when calculating where the line wrap is, we go back to get a full word to wrap, but if the word is too long (currently 20 characters long is too long), we just wrap on the spot. This wrap is causing a bounds issue where one of the characters is caught in nowhere and will not render. A little bit of an edge case but it matters.
 
-  ------------------
- /   QUICK ONES   /
-------------------
+Improvement/Use Commands Instead Of Keys: some places are still using just keys, need to change these to commands so the rebinding works correctly.
+  ----------------
+ /   NICETIES   /
+----------------

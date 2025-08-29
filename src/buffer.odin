@@ -38,6 +38,7 @@ Buffer :: struct {
     add_source:       strings.Builder,
     pieces:           [dynamic]Piece,
     text_content:     strings.Builder,
+    line_starts:      [dynamic]int,
     tokens:           [dynamic]Token_Kind,
 
     indent: struct {
@@ -336,6 +337,7 @@ buffer_destroy :: proc(buffer: ^Buffer) {
     delete(buffer.cursors)
     for piece in buffer.pieces do delete(piece.line_starts)
     delete(buffer.pieces)
+    delete(buffer.line_starts)
     delete(buffer.tokens)
     delete(buffer.undo)
     delete(buffer.redo)
@@ -363,17 +365,15 @@ update_opened_buffers :: proc() {
             unflag_buffer(buffer, {.Dirty})
             if len(buffer.pieces) == 0 do append(&buffer.pieces, _create_original_piece())
             strings.builder_reset(&buffer.text_content)
-            lines_array := make([dynamic]int, 1, context.temp_allocator)
-            collect_pieces_from_buffer(buffer, &buffer.text_content, &lines_array)
+            clear(&buffer.line_starts)
+            collect_pieces_from_buffer(buffer, &buffer.text_content, &buffer.line_starts)
             tokenize_buffer(buffer)
             profiling_end()
 
             profiling_start("passing buffer text to pane")
             for pane in open_panes {
-                if pane.buffer != buffer do continue
-                delete(pane.line_starts)
+                if pane.buffer.uuid != buffer.uuid do continue
                 pane.contents = strings.to_string(buffer.text_content)
-                pane.line_starts = slice.clone_to_dynamic(lines_array[:])
                 if .Line_Wrappings in pane.flags do recalculate_line_wrappings(pane)
                 flag_pane(pane, {.Need_Full_Repaint})
             }
@@ -459,8 +459,10 @@ collect_pieces_from_buffer :: proc(
     // first line should already be the index 0, the rest will be
     // filled up by this procedure, including the last line. The
     // builder should be given empty.
-    if lines_array != nil do assert(len(lines_array) == 1 && lines_array[0] == 0)
+    if lines_array != nil do assert(len(lines_array) == 0)
     if builder != nil do assert(len(builder.buf) == 0)
+
+    append(lines_array, 0)
 
     total_length := 0
 
