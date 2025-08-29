@@ -148,8 +148,19 @@ draw_code :: proc(pane: ^Pane, font: ^Font, pen: Vector2, code_lines: []Code_Lin
             draw_rect(sx, sy, window_width - sx, font.line_height, true)
         }
 
-        if settings.show_trailing_whitespaces {
-            if code.line_is_wrapped || !ends_with_whitespace do continue
+        if settings.show_trailing_whitespaces && ends_with_whitespace {
+            // this line is wrapped, so check if the next line is also trailing whitespaces
+            if code.line_is_wrapped && y_offset < len(code_lines) - 1 {
+                next_code := code_lines[y_offset + 1]
+
+                non_whitespace_found := false
+                for r in next_code.line {
+                    non_whitespace_found = r != ' ' && r != '\t'
+                    if non_whitespace_found do break
+                }
+                if non_whitespace_found do continue
+            }
+
             is_cursor_around := false
             count_of_whitespaces := 0
 
