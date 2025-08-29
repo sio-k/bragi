@@ -381,21 +381,13 @@ edit_mode_keyboard_event_handler :: proc(event: Event_Keyboard, cmd: Command) ->
         return true
 
     case .cut_selection:
+        copy_selected_text(pane, true)
+        remove_selections(pane)
     case .cut_line:
         remove_to(pane, .end_of_line)
         return true
     case .copy_selection:
-        text_to_copy := strings.builder_make(context.temp_allocator)
-        sort_cursors_by_offset(pane)
-        for &cursor in pane.cursors {
-            if !cursor.active do continue
-            if !has_selection(cursor) do continue
-            low, high := sorted_cursor(cursor)
-            strings.write_string(&text_to_copy, pane.contents[low:high])
-            cursor.sel = cursor.pos
-        }
-        platform_set_clipboard_text(strings.to_string(text_to_copy))
-
+        copy_selected_text(pane)
         return true
     case .copy_line:
     case .paste:
@@ -406,6 +398,19 @@ edit_mode_keyboard_event_handler :: proc(event: Event_Keyboard, cmd: Command) ->
     }
 
     return false
+}
+
+copy_selected_text :: proc(pane: ^Pane, keep_selection := false) {
+    text_to_copy := strings.builder_make(context.temp_allocator)
+    sort_cursors_by_offset(pane)
+    for &cursor in pane.cursors {
+        if !cursor.active do continue
+        if !has_selection(cursor) do continue
+        low, high := sorted_cursor(cursor)
+        strings.write_string(&text_to_copy, pane.contents[low:high])
+        if !keep_selection do cursor.sel = cursor.pos
+    }
+    platform_set_clipboard_text(strings.to_string(text_to_copy))
 }
 
 clone_to :: proc(pane: ^Pane, t: Translation) {
