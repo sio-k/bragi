@@ -97,7 +97,7 @@ buffer_get_or_create_from_file :: proc(fullpath: string, contents: []byte) -> ^B
     result := new(Buffer)
     buffer_init(result, contents)
     result.filepath = strings.clone(fullpath)
-    result.name = strings.clone(_get_unique_buffer_name(fullpath))
+    result.name = strings.clone(_get_unique_buffer_name(result, fullpath))
     _buffer_set_major_mode(result)
     append(&open_buffers, result)
     return result
@@ -150,7 +150,7 @@ _buffer_set_major_mode :: proc(buffer: ^Buffer) {
 }
 
 @(private="file")
-_get_unique_buffer_name :: proc(fullpath: string) -> (result: string) {
+_get_unique_buffer_name :: proc(buffer: ^Buffer, fullpath: string) -> (result: string) {
     _gen_name_from_fullpath :: proc(prev_name: string, fullpath: string) -> (new_name: string) {
         posix_fullpath, _ := filepath.to_slash(fullpath, context.temp_allocator)
         substr_index := strings.index(posix_fullpath, prev_name)
@@ -166,12 +166,16 @@ _get_unique_buffer_name :: proc(fullpath: string) -> (result: string) {
 
     for {
         // find the buffers with matching_name
-        for buffer in open_buffers {
-            if buffer.filepath != "" {
-                if buffer.name == result {
-                    append(&buffers_with_matching_names, buffer)
-                } else if filepath.base(buffer.filepath) == result {
-                    append(&buffers_with_matching_names, buffer)
+        for other in open_buffers {
+            // if a buffer is passed to this procedure, skip it in the
+            // check. Good for when doing "save as" in buffers that
+            // will be renamed anyways.
+            if buffer.uuid == other.uuid do continue
+            if other.filepath != "" {
+                if other.name == result {
+                    append(&buffers_with_matching_names, other)
+                } else if filepath.base(other.filepath) == result {
+                    append(&buffers_with_matching_names, other)
                 }
             }
         }
@@ -183,10 +187,10 @@ _get_unique_buffer_name :: proc(fullpath: string) -> (result: string) {
         // unique, appending as much as it is needed so it doesn't
         // repeat.
         for len(buffers_with_matching_names) > 0 {
-            buffer := pop(&buffers_with_matching_names)
-            delete(buffer.name)
-            new_name := _gen_name_from_fullpath(filepath.base(buffer.filepath), buffer.filepath)
-            buffer.name = strings.clone(new_name)
+            other := pop(&buffers_with_matching_names)
+            delete(other.name)
+            new_name := _gen_name_from_fullpath(filepath.base(other.filepath), other.filepath)
+            other.name = strings.clone(new_name)
         }
 
         result = _gen_name_from_fullpath(result, fullpath)
@@ -200,8 +204,9 @@ buffer_save_as :: proc(buffer: ^Buffer, fullpath: string) {
 
     delete(buffer.filepath)
     delete(buffer.name)
+    unflag_buffer(buffer, {.Scratch})
     buffer.filepath = strings.clone(fullpath)
-    buffer.name = strings.clone(_get_unique_buffer_name(fullpath))
+    buffer.name = strings.clone(_get_unique_buffer_name(buffer, fullpath))
     buffer_save(buffer)
 }
 
