@@ -713,7 +713,7 @@ maybe_recenter_cursor :: proc(pane: ^Pane, force_recenter := false) {
     right_edge := get_pane_visible_columns(pane)
 
     if force_recenter || coords.row < top_edge || coords.row > bottom_edge {
-        pane.y_offset = clamp(coords.row - pane.visible_rows/2, 0, len(lines) - pane.visible_rows/2)
+        pane.y_offset = max(coords.row - pane.visible_rows/2, 0)
 
         if coords.column < right_edge {
             pane.x_offset = 0

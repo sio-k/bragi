@@ -775,7 +775,12 @@ _find_or_save_file_widget_update :: proc() {
 @(private="file")
 _search_in_buffer_widget_update :: proc() {
     _select_result_with_pane_cursor :: proc() {
-        cursor := global_widget.cursor
+        cursor := &global_widget.cursor
+
+        if cursor.index >= len(global_widget.view_results) {
+            cursor.index = -1
+            return
+        }
 
         if cursor.index > -1 {
             result := global_widget.view_results[cursor.index]
@@ -791,7 +796,6 @@ _search_in_buffer_widget_update :: proc() {
     query := strings.to_string(global_widget.prompt)
     query_len := len(query)
 
-    if len(global_widget.view_results) == 0 do cursor.index = -1
     _select_result_with_pane_cursor()
 
     if !global_widget.results_need_update do return
