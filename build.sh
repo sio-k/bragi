@@ -1,7 +1,7 @@
 #!/bin/sh
 
-DEST_FOLDER="./dist"
-BIN_NAME="bragi"
+DEST_FOLDER="./debug"
+BIN_NAME="bragi_debug"
 COMMAND="$1"
 CONFIG="$2"
 
@@ -15,7 +15,7 @@ mkdir -p $DEST_FOLDER
 
 cd $DEST_FOLDER
 
-odin build ../src -show-timings -use-separate-modules -out:$BIN_NAME -strict-style -vet-using-stmt -vet-using-param -vet-style -vet-semicolon -debug -vet -define:BRAGI_DEBUG=true
+odin build ../src -show-timings -use-separate-modules -out:$BIN_NAME -strict-style -vet-using-stmt -vet-using-param -vet-style -vet-semicolon -debug -vet -define:BRAGI_DEBUG=true -define:BRAGI_SLOW=true
 
 if [[ "$?" = 0 ]] && [[ "$COMMAND" = "run" ]]; then
     ./${BIN_NAME}

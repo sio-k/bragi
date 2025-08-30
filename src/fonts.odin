@@ -97,8 +97,8 @@ initialize_font_related_stuff :: proc() {
 
     scaled_font_editor_size := font_to_scaled_pixels(f32(settings.editor_font_size))
     scaled_font_ui_size     := font_to_scaled_pixels(f32(settings.ui_font_size))
-    scaled_font_icons_size  := font_to_scaled_pixels(f32(settings.ui_font_size), 1.33)
-    scaled_font_small_size  := font_to_scaled_pixels(f32(settings.ui_font_size), 0.8)
+    scaled_font_icons_size  := font_to_scaled_pixels(f32(settings.ui_font_size), 0, 1.33)
+    scaled_font_small_size  := font_to_scaled_pixels(f32(settings.ui_font_size), -4)
 
     fonts_map[.UI_Regular] = get_font_with_size(FONT_UI_NAME,        FONT_UI_DATA,        scaled_font_ui_size   )
     fonts_map[.UI_Italic]  = get_font_with_size(FONT_UI_ITALIC_NAME, FONT_UI_ITALIC_DATA, scaled_font_ui_size   )
@@ -106,15 +106,22 @@ initialize_font_related_stuff :: proc() {
     fonts_map[.UI_Small]   = get_font_with_size(FONT_UI_NAME,        FONT_UI_DATA,        scaled_font_small_size)
     fonts_map[.Icons]      = get_font_with_size(FONT_ICONS_NAME,     FONT_ICONS_DATA,     scaled_font_icons_size)
 
-    prepare_text(get_font_with_size(FONT_EDITOR_NAME, FONT_EDITOR_DATA, scaled_font_editor_size), COMMON_CHARACTERS)
+    // each pane has its own font, so we only preload the default size
+    // and we don't store it in fonts_map. The UI of the editor should
+    // rely on the UI fonts.
+    prepare_text(
+        get_font_with_size(
+            FONT_EDITOR_NAME, FONT_EDITOR_DATA, scaled_font_editor_size,
+        ), COMMON_CHARACTERS,
+    )
     prepare_text(fonts_map[.UI_Regular], COMMON_CHARACTERS)
     prepare_text(fonts_map[.UI_Italic],  COMMON_CHARACTERS)
     prepare_text(fonts_map[.UI_Bold],    COMMON_CHARACTERS)
     prepare_text(fonts_map[.UI_Small],   "0123456789") // usually used for numbers
 }
 
-font_to_scaled_pixels :: proc(pt: f32, scale: f32 = 1.0) -> i32 {
-    result := math.ceil((f32(pt) * dpi_scale) * scale)
+font_to_scaled_pixels :: proc(pt: f32, size_diff: f32 = 0, scale: f32 = 1.0) -> i32 {
+    result := math.ceil(((f32(pt) + size_diff) * dpi_scale) * scale)
     return clamp(i32(result), MINIMUM_FONT_SIZE, MAXIMUM_FONT_SIZE)
 }
 

@@ -9,7 +9,11 @@ import "core:mem"
 import "core:os"
 import "core:time"
 
-NAME    :: "Bragi"
+when BRAGI_DEBUG {
+    NAME :: "Bragi DEBUG"
+} else {
+    NAME :: "Bragi"
+}
 ID      :: "bragi"
 AUTHOR  :: "Nahuel J. Sacchetti"
 URL     :: "https://github.com/nawetimebomb/bragi"
@@ -17,7 +21,7 @@ VERSION :: "0.01"
 ICON    :: #load(RUN_TREE_DIR + "/icons/bragi-icon_large.png")
 
 BRAGI_DEBUG :: #config(BRAGI_DEBUG, false) // enables functionality in debug.odin
-BRAGI_PROFILING :: #config(BRAGI_PROFILING, false) // inits profiling on application start
+BRAGI_SLOW  :: #config(BRAGI_SLOW, false)  // enables 30 FPS mode
 
 RUN_TREE_DIR :: "../res"
 
@@ -44,8 +48,6 @@ mouse_x: i32
 mouse_y: i32
 
 frame_delta_time:      time.Duration
-frame_count:           u64
-frame_count_no_errors: u64
 
 DEFAULT_SETTINGS_DATA :: #load(RUN_TREE_DIR + "/settings.bragi")
 SETTINGS_FILENAME     :: "settings.bragi"
@@ -69,6 +71,7 @@ modifiers_queue:     [dynamic]string
 bragi_allocator:   runtime.Allocator
 bragi_context:     runtime.Context
 bragi_running:     bool
+bragi_first_frame: bool
 
 // TODO(nawe) this should probably be an arena allocator that will contain
 // the editor settings and array of panes and buffers. The buffer content
@@ -99,19 +102,14 @@ main :: proc() {
     context.logger = log.create_console_logger()
     context.random_generator = crypto.random_generator()
 
-    when BRAGI_PROFILING {
-        profiling_init()
-    }
-
     bragi_allocator = context.allocator
 
     settings_init()
     platform_init()
     commands_init()
     major_modes_init()
-    DEBUG_init()
-
     initialize_font_related_stuff()
+    DEBUG_init()
 
     widget_init()
     active_pane = pane_create()
@@ -243,6 +241,7 @@ main :: proc() {
 
         set_color(.background)
         prepare_for_drawing()
+
         update_opened_buffers()
         update_active_pane()
         draw_panes()
@@ -250,10 +249,11 @@ main :: proc() {
         DEBUG_update_draw()
         draw_frame()
 
-        free_all(context.temp_allocator)
+        platform_sleep()
+
         frame_delta_time = time.tick_lap_time(&previous_frame_time)
-        frame_count += 1
-        frame_count_no_errors += 1
+        bragi_first_frame = true
+        free_all(context.temp_allocator)
     }
 
     widget_close()
@@ -275,10 +275,6 @@ main :: proc() {
 
     DEBUG_destroy()
     platform_destroy()
-
-    when BRAGI_PROFILING {
-        profiling_destroy()
-    }
 
     log.destroy_console_logger(context.logger)
 

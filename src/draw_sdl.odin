@@ -422,6 +422,16 @@ draw_rect :: #force_inline proc(x, y, w, h: i32, fill := true) {
     }
 }
 
+draw_rect_f32 :: #force_inline proc(x, y, w, h: f32, fill := true) {
+    rect := Rect{x, y, w, h}
+
+    if fill {
+        sdl.RenderFillRect(renderer, &rect)
+    } else {
+        sdl.RenderRect(renderer, &rect)
+    }
+}
+
 draw_line :: #force_inline proc(x1, y1, x2, y2: i32) {
     sdl.RenderLine(renderer, f32(x1), f32(y1), f32(x2), f32(y2))
 }
@@ -496,6 +506,9 @@ draw_text_line :: proc(font: ^Font, pen: Vector2, text: string, selection: Range
     return {sx, sy}
 }
 
+icon_to_string :: #force_inline proc(x: rune) -> string {
+    return utf8.runes_to_string({x, ' '}, context.temp_allocator)
+}
 
 draw_text :: proc(font: ^Font, pen: Vector2, text: string) -> (pen2: Vector2) {
     sx, sy := pen.x, pen.y

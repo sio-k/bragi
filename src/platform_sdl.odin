@@ -62,7 +62,6 @@ platform_init :: proc() {
         log.fatal("failed to setup renderer", sdl.GetError())
     }
     log.debugf("renderer created with driver '{}'", sdl.GetRenderDriver(0))
-
     sdl.SetRenderVSync(renderer, sdl.RENDERER_VSYNC_ADAPTIVE)
 
     if !sdl.StartTextInput(window) {
@@ -113,6 +112,15 @@ platform_destroy :: proc() {
     sdl.DestroyRenderer(renderer)
     sdl.DestroyWindow(window)
     sdl.Quit()
+}
+
+platform_sleep :: proc() {
+    when BRAGI_SLOW {
+        sdl.Delay(32)
+    } else {
+        // ~240 FPS is a lot...
+        sdl.Delay(4)
+    }
 }
 
 @(private="file")
