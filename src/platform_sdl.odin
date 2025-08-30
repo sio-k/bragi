@@ -145,7 +145,7 @@ platform_update_events :: proc() {
                     data = data,
                 })
             }
-            case .WINDOW_FOCUS_GAINED, .WINDOW_FOCUS_LOST, .WINDOW_MOVED, .WINDOW_RESIZED: {
+            case .WINDOW_FOCUS_GAINED, .WINDOW_FOCUS_LOST, .WINDOW_MOVED, .WINDOW_RESIZED, .WINDOW_MAXIMIZED: {
                 // NOTE(nawe) Performance: it might be just better to
                 // keep these resizes in a different list of events so
                 // they can all be handled once the resizing is

@@ -51,23 +51,32 @@ draw_frame :: #force_inline proc() {
 
 draw_texture :: #force_inline proc(texture: ^Texture, src, dest: ^Rect, loc := #caller_location) {
     if !sdl.RenderTexture(renderer, texture, src, dest) {
-        log.errorf("failed to render texture at '{}'", loc)
+        log.errorf("failed to render texture at '{}'. Error: {}", loc, sdl.GetError())
     }
 }
 
-set_color :: proc{
-    set_color_texture,
-    set_color_background,
+set_color :: #force_inline proc(face: Face_Color, texture: ^Texture = nil) {
+    c := colorscheme[face]
+    if texture == nil {
+        sdl.SetRenderDrawColor(renderer, c.r, c.g, c.b, c.a)
+    } else {
+        sdl.SetTextureColorMod(texture, c.r, c.g, c.b)
+    }
 }
 
-set_color_background :: #force_inline proc(face: Face_Color) {
-    c := colorscheme[face]
-    sdl.SetRenderDrawColor(renderer, c.r, c.g, c.b, c.a)
+set_colors :: #force_inline proc(face: Face_Color, textures: []^Texture) {
+    for t in textures do set_color(face, t)
 }
 
-set_color_texture :: #force_inline proc(face: Face_Color, texture: ^Texture) {
-    c := colorscheme[face]
-    sdl.SetTextureColorMod(texture, c.r, c.g, c.b)
+set_custom_color :: proc(color: int, texture: ^Texture = nil) {
+    c := hex_to_color(color)
+
+    if texture == nil {
+        sdl.SetRenderDrawColor(renderer, c.r, c.g, c.b, c.a)
+    } else {
+        sdl.SetTextureColorMod(texture, c.r, c.g, c.b)
+        sdl.SetTextureAlphaMod(texture, c.a)
+    }
 }
 
 set_color_from_token :: #force_inline proc(kind: Token_Kind, texture: ^Texture) {
@@ -88,10 +97,6 @@ set_color_from_token :: #force_inline proc(kind: Token_Kind, texture: ^Texture) 
     }
 
     sdl.SetTextureColorMod(texture, c.r, c.g, c.b)
-}
-
-set_colors :: #force_inline proc(face: Face_Color, textures: []^Texture) {
-    for t in textures do set_color_texture(face, t)
 }
 
 set_target :: #force_inline proc(target: ^Texture = nil) {

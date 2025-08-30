@@ -16,6 +16,7 @@ URL     :: "https://github.com/nawetimebomb/bragi"
 VERSION :: "0.01"
 ICON    :: #load(RUN_TREE_DIR + "/icons/bragi-icon_large.png")
 
+BRAGI_DEBUG :: #config(BRAGI_DEBUG, false) // enables functionality in debug.odin
 BRAGI_PROFILING :: #config(BRAGI_PROFILING, false) // inits profiling on application start
 
 RUN_TREE_DIR :: "../res"
@@ -28,6 +29,8 @@ FONT_UI_ITALIC_NAME :: "roboto-italic.ttf"
 FONT_UI_ITALIC_DATA :: #load(RUN_TREE_DIR + "/fonts/roboto-italic.ttf")
 FONT_UI_BOLD_NAME   :: "roboto-semibold.ttf"
 FONT_UI_BOLD_DATA   :: #load(RUN_TREE_DIR + "/fonts/roboto-bold.ttf")
+FONT_ICONS_NAME     :: "fontawesome.ttf"
+FONT_ICONS_DATA     :: #load(RUN_TREE_DIR + "/fonts/fontawesome.ttf")
 
 MINIMUM_WINDOW_SIZE :: 800
 DEFAULT_WINDOW_SIZE :: 1200
@@ -40,7 +43,9 @@ dpi_scale:       f32  = 1.0
 mouse_x: i32
 mouse_y: i32
 
-frame_delta_time: time.Duration
+frame_delta_time:      time.Duration
+frame_count:           u64
+frame_count_no_errors: u64
 
 DEFAULT_SETTINGS_DATA :: #load(RUN_TREE_DIR + "/settings.bragi")
 SETTINGS_FILENAME     :: "settings.bragi"
@@ -61,9 +66,9 @@ events_this_frame:   [dynamic]Event
 last_keystroke:      time.Tick
 modifiers_queue:     [dynamic]string
 
-bragi_allocator: runtime.Allocator
-bragi_context:   runtime.Context
-bragi_running:   bool
+bragi_allocator:   runtime.Allocator
+bragi_context:     runtime.Context
+bragi_running:     bool
 
 // TODO(nawe) this should probably be an arena allocator that will contain
 // the editor settings and array of panes and buffers. The buffer content
@@ -73,9 +78,6 @@ tracking_allocator: mem.Tracking_Allocator
 
 main :: proc() {
     initialization_time := time.now()
-    context.logger = log.create_console_logger()
-    context.random_generator = crypto.random_generator()
-
     when ODIN_DEBUG {
         default_allocator := context.allocator
         mem.tracking_allocator_init(&tracking_allocator, default_allocator)
@@ -94,6 +96,9 @@ main :: proc() {
         }
     }
 
+    context.logger = log.create_console_logger()
+    context.random_generator = crypto.random_generator()
+
     when BRAGI_PROFILING {
         profiling_init()
     }
@@ -104,7 +109,7 @@ main :: proc() {
     platform_init()
     commands_init()
     major_modes_init()
-    debug_init()
+    DEBUG_init()
 
     initialize_font_related_stuff()
 
@@ -156,26 +161,8 @@ main :: proc() {
                     continue
                 }
 
-                handled := false
-
-                #partial switch v.key_code {
-                    case .K_F2: {
-                        if debug.profiling {
-                            profiling_destroy()
-                        } else {
-                            profiling_init()
-                        }
-                        handled = true
-                    }
-                    case .K_F3: {
-                        debug.show_debug_info = !debug.show_debug_info
-                        handled = true
-                    }
-                    case .K_ESCAPE: {
-                        quit_mode_command()
-                        handled = true
-                    }
-                }
+                // will always be false if BRAGI_DEBUG is not defined.
+                handled := DEBUG_handle_input(event)
 
                 cmd: Command = .noop
                 key_combo: string
@@ -260,18 +247,19 @@ main :: proc() {
         update_active_pane()
         draw_panes()
         update_and_draw_widget()
-        debug_draw()
+        DEBUG_update_draw()
         draw_frame()
 
         free_all(context.temp_allocator)
         frame_delta_time = time.tick_lap_time(&previous_frame_time)
+        frame_count += 1
+        frame_count_no_errors += 1
     }
 
     widget_close()
     input_destroy()
     fonts_destroy()
     commands_destroy()
-    debug_destroy()
     major_modes_destroy()
 
     active_pane = nil
@@ -285,11 +273,14 @@ main :: proc() {
     delete(base_working_dir)
     delete(last_search_term)
 
+    DEBUG_destroy()
     platform_destroy()
 
     when BRAGI_PROFILING {
         profiling_destroy()
     }
+
+    log.destroy_console_logger(context.logger)
 
     when ODIN_DEBUG {
         reset_tracking_allocator(&tracking_allocator)

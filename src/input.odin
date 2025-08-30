@@ -3,6 +3,8 @@ package main
 import "core:log"
 import "core:time"
 
+_ :: log
+
 // NOTE(nawe) Not good right now, because I'm basically remapping SDL
 // that already knows all this, but it will be good in the future when
 // I handroll the platform code, and I will need a standardized event

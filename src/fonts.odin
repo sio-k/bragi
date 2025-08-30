@@ -13,6 +13,7 @@ Font_Face :: enum {
     UI_Italic,
     UI_Bold,
     UI_Small,
+    Icons,
 }
 
 Glyph_Data :: struct {
@@ -96,12 +97,14 @@ initialize_font_related_stuff :: proc() {
 
     scaled_font_editor_size := font_to_scaled_pixels(f32(settings.editor_font_size))
     scaled_font_ui_size     := font_to_scaled_pixels(f32(settings.ui_font_size))
+    scaled_font_icons_size  := font_to_scaled_pixels(f32(settings.ui_font_size), 1.33)
     scaled_font_small_size  := font_to_scaled_pixels(f32(settings.ui_font_size), 0.8)
 
     fonts_map[.UI_Regular] = get_font_with_size(FONT_UI_NAME,        FONT_UI_DATA,        scaled_font_ui_size   )
     fonts_map[.UI_Italic]  = get_font_with_size(FONT_UI_ITALIC_NAME, FONT_UI_ITALIC_DATA, scaled_font_ui_size   )
     fonts_map[.UI_Bold]    = get_font_with_size(FONT_UI_BOLD_NAME,   FONT_UI_BOLD_DATA,   scaled_font_ui_size   )
     fonts_map[.UI_Small]   = get_font_with_size(FONT_UI_NAME,        FONT_UI_DATA,        scaled_font_small_size)
+    fonts_map[.Icons]      = get_font_with_size(FONT_ICONS_NAME,     FONT_ICONS_DATA,     scaled_font_icons_size)
 
     prepare_text(get_font_with_size(FONT_EDITOR_NAME, FONT_EDITOR_DATA, scaled_font_editor_size), COMMON_CHARACTERS)
     prepare_text(fonts_map[.UI_Regular], COMMON_CHARACTERS)

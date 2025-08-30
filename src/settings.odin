@@ -86,40 +86,40 @@ settings_init :: proc() {
     settings.maximize_window_on_start = true
     settings.modeline_position        = .bottom
 
-    colorscheme[.background]                        = _hex_to_color(0x050505)
-    colorscheme[.foreground]                        = _hex_to_color(0xa08563)
-    colorscheme[.highlight]                         = _hex_to_color(0xcd950c)
-    colorscheme[.cursor_active]                     = _hex_to_color(0xcd950c)
-    colorscheme[.cursor_inactive]                   = _hex_to_color(0x98a098)
-    colorscheme[.region]                            = _hex_to_color(0x0a0b62)
-    colorscheme[.search_background]                 = _hex_to_color(0xd2d2d2)
-    colorscheme[.search_foreground]                 = _hex_to_color(0x010101)
+    colorscheme[.background]                        = hex_to_color(0x050505)
+    colorscheme[.foreground]                        = hex_to_color(0xa08563)
+    colorscheme[.highlight]                         = hex_to_color(0xcd950c)
+    colorscheme[.cursor_active]                     = hex_to_color(0xcd950c)
+    colorscheme[.cursor_inactive]                   = hex_to_color(0x98a098)
+    colorscheme[.region]                            = hex_to_color(0x0a0b62)
+    colorscheme[.search_background]                 = hex_to_color(0xd2d2d2)
+    colorscheme[.search_foreground]                 = hex_to_color(0x010101)
 
-    colorscheme[.code_builtin]                      = _hex_to_color(0x875e9a)
-    colorscheme[.code_comment]                      = _hex_to_color(0xe27d51)
-    colorscheme[.code_constant_value]               = _hex_to_color(0x5aa0b3)
-    colorscheme[.code_directive]                    = _hex_to_color(0x875e9a)
-    colorscheme[.code_enum_variant]                 = _hex_to_color(0x98a098)
-    colorscheme[.code_function_name]                = _hex_to_color(0xa08563)
-    colorscheme[.code_keyword]                      = _hex_to_color(0xcd950c)
-    colorscheme[.code_string]                       = _hex_to_color(0x6b8e23)
-    colorscheme[.code_type]                         = _hex_to_color(0x98a098)
-    colorscheme[.code_variable_name]                = _hex_to_color(0xa08563)
+    colorscheme[.code_builtin]                      = hex_to_color(0x875e9a)
+    colorscheme[.code_comment]                      = hex_to_color(0xe27d51)
+    colorscheme[.code_constant_value]               = hex_to_color(0x5aa0b3)
+    colorscheme[.code_directive]                    = hex_to_color(0x875e9a)
+    colorscheme[.code_enum_variant]                 = hex_to_color(0x98a098)
+    colorscheme[.code_function_name]                = hex_to_color(0xa08563)
+    colorscheme[.code_keyword]                      = hex_to_color(0xcd950c)
+    colorscheme[.code_string]                       = hex_to_color(0x6b8e23)
+    colorscheme[.code_type]                         = hex_to_color(0x98a098)
+    colorscheme[.code_variable_name]                = hex_to_color(0xa08563)
 
-    colorscheme[.ui_border]                         = _hex_to_color(0x373b41)
-    colorscheme[.ui_trailing_whitespace]            = _hex_to_color(0xe66250)
-    colorscheme[.ui_selection_background]           = _hex_to_color(0x0a0b62)
-    colorscheme[.ui_selection_foreground]           = _hex_to_color(0xd2d2d2)
-    colorscheme[.ui_line_number_background]         = _hex_to_color(0x050505)
-    colorscheme[.ui_line_number_foreground]         = _hex_to_color(0x373b41)
-    colorscheme[.ui_line_number_background_current] = _hex_to_color(0x131313)
-    colorscheme[.ui_line_number_foreground_current] = _hex_to_color(0x98a098)
-    colorscheme[.ui_modeline_active_background]     = _hex_to_color(0x131313)
-    colorscheme[.ui_modeline_active_foreground]     = _hex_to_color(0xa08563)
-    colorscheme[.ui_modeline_active_highlight]      = _hex_to_color(0xcd950c)
+    colorscheme[.ui_border]                         = hex_to_color(0x373b41)
+    colorscheme[.ui_trailing_whitespace]            = hex_to_color(0xe66250)
+    colorscheme[.ui_selection_background]           = hex_to_color(0x0a0b62)
+    colorscheme[.ui_selection_foreground]           = hex_to_color(0xd2d2d2)
+    colorscheme[.ui_line_number_background]         = hex_to_color(0x050505)
+    colorscheme[.ui_line_number_foreground]         = hex_to_color(0x373b41)
+    colorscheme[.ui_line_number_background_current] = hex_to_color(0x131313)
+    colorscheme[.ui_line_number_foreground_current] = hex_to_color(0x98a098)
+    colorscheme[.ui_modeline_active_background]     = hex_to_color(0x131313)
+    colorscheme[.ui_modeline_active_foreground]     = hex_to_color(0xa08563)
+    colorscheme[.ui_modeline_active_highlight]      = hex_to_color(0xcd950c)
 
-    colorscheme[.ui_modeline_inactive_background]   = _hex_to_color(0x010101)
-    colorscheme[.ui_modeline_inactive_foreground]   = _hex_to_color(0x616161)
+    colorscheme[.ui_modeline_inactive_background]   = hex_to_color(0x010101)
+    colorscheme[.ui_modeline_inactive_foreground]   = hex_to_color(0x616161)
 
     colorscheme[.debug_background] = {16, 16, 16, 150}
     colorscheme[.debug_foreground] = {255, 255, 255, 255}
@@ -206,8 +206,7 @@ _settings_setup_basic_bragi_keybindings :: proc() {
     commands_map["CTRL-SHIFT-Z"]     = .redo
 }
 
-@(private="file")
-_hex_to_color :: proc(hex: int) -> (result: Color) {
+hex_to_color :: proc(hex: int) -> (result: Color) {
     result.r = u8((hex >> 16) & 0xff)
     result.g = u8((hex >> 8) & 0xff)
     result.b = u8((hex) & 0xff)
