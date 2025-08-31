@@ -14,13 +14,16 @@ _ :: slice
 _ :: time
 
 when BRAGI_DEBUG {
-    DEBUG_WINDOW_SIZE          :: MINIMUM_WINDOW_SIZE
+    DEBUG_WINDOW_SIZE          :: 1080
+    // TODO(nawe) make these reusable, maybe don't care too much of
+    // over-abstracting here since the overhead already exists.
     TRANSPARENCY_BAR_WIDTH     :: 50
     TRANSPARENCY_BAR_HEIGHT    :: 4
     TRANSPARENCY_SLIDER_WIDTH  :: 10
     TRANSPARENCY_SLIDER_HEIGHT :: 6
     MAX_SNAPSHOT_LEN           :: 120
     TITLE_PADDING              :: 6
+    SECTION_SPACING            :: 40
     CHART_MAX_HEIGHT           :: 60
 
     // colors
@@ -52,8 +55,11 @@ when BRAGI_DEBUG {
     _current_frame:              u64
     _frame_count_with_no_errors: u64
 
+    _scrolling: f32
+
     Debug_Tab :: enum u8 {
         Frame_Info,
+        Buffer,
         Memory,
         Logs,
     }
@@ -61,25 +67,28 @@ when BRAGI_DEBUG {
     @(private="file")
     _debug: struct {
         show_debug_overlay: bool,
+        rect:               Rect,
+        texture:            ^Texture,
+        grabbed:            bool,
+        grab_point:         [2]f32,
+        slider_grabbed:     bool,
+        minimized:          bool,
 
-        grabbed:        bool,
-        grab_point:     [2]f32,
-        slider_grabbed: bool,
-        minimized:      bool,
-
-        tabs:          [len(Debug_Tab)]Rect,
-        current_tab:   Debug_Tab,
+        tabs:               [len(Debug_Tab)]Rect,
+        current_tab:        Debug_Tab,
 
         // render tab
         fps_chart_top: f32,
-        fps_curr:      f32,
+        fps_current:   f32,
         fps_max:       f32,
         fps_min:       f32,
         fps_avg:       f32,
         fps_values:    [MAX_SNAPSHOT_LEN]f32,
+        ft_current:    f64,
+        ft_highest:    f64,
+        ft_lowest:     f64,
 
-        rect:               Rect,
-        texture:            ^Texture,
+        // memory tab
     }
 
     @(private)
@@ -94,6 +103,8 @@ when BRAGI_DEBUG {
 
         _line_height  = _font_bold.line_height
         _title_height = _line_height + TITLE_PADDING
+
+        _debug.ft_lowest = 999
     }
 
     @(private)
@@ -125,7 +136,7 @@ when BRAGI_DEBUG {
                     mx, my := platform_get_mouse_position()
                     r := _debug.rect
                     x1, x2 := r.x, r.x + r.w - TRANSPARENCY_BAR_WIDTH - 20
-                    y1, y2 := r.y, r.y + r.h
+                    y1, y2 := r.y, r.y + f32(_title_height)
                     return mx >= x1 && mx <= x2 && my >= y1 && my <= y2
                 }
 
@@ -135,6 +146,13 @@ when BRAGI_DEBUG {
                     x1, x2 := r.x + r.w - TRANSPARENCY_BAR_WIDTH - 10, r.x + r.w
                     y1, y2 := r.y, r.y + r.h
                     return mx >= x1 && mx <= x2 && my >= y1 && my <= y2
+                }
+
+                if v.scroll_y != 0 {
+                    _scrolling += v.scroll_y * 20
+                    _scrolling = clamp(_scrolling, 0, 500)
+
+                    return true
                 }
 
                 if _debug.grabbed && !v.down && v.button == .Left {
@@ -198,9 +216,11 @@ when BRAGI_DEBUG {
             _snapshot_index = 0
         }
 
-        frametime := time.duration_milliseconds(frame_delta_time)
-        _debug.fps_curr = f32(1000/frametime)
-        _debug.fps_values[_snapshot_index] = _debug.fps_curr
+        _debug.ft_current = time.duration_milliseconds(frame_delta_time)
+        _debug.ft_highest = max(_debug.ft_current, _debug.ft_highest)
+        _debug.ft_lowest  = min(_debug.ft_current, _debug.ft_lowest)
+        _debug.fps_current = f32(1000/_debug.ft_current)
+        _debug.fps_values[_snapshot_index] = _debug.fps_current
         _debug.fps_min, _debug.fps_max, _ = slice.min_max(_debug.fps_values[:])
         total := slice.reduce(_debug.fps_values[:], f32(0), proc(a: f32, v: f32) -> f32 {
             return a + v
@@ -210,16 +230,24 @@ when BRAGI_DEBUG {
 
         if !_debug.show_debug_overlay do return
 
-        DEBUG_draw_window()
-    }
-
-    DEBUG_draw_window :: proc() {
         set_target(_debug.texture)
         set_custom_color(BACKGROUND_LIGHT)
         prepare_for_drawing()
 
-        {
-            // heading
+        DEBUG_draw_window()
+        DEBUG_draw_heading()
+
+        set_target()
+        _debug.rect.h = DEBUG_WINDOW_SIZE
+        if _debug.minimized {
+            _debug.rect.h = f32(_title_height)
+        }
+        src_rect := Rect{0, 0, _debug.rect.w, _debug.rect.h}
+        draw_texture(_debug.texture, &src_rect, &_debug.rect)
+    }
+
+    DEBUG_draw_heading :: proc() {
+        { // heading
             w, h := i32(_debug.rect.w)-1, i32(_debug.rect.h)-1
             h2 := _title_height // below the title
             set_custom_color(BACKGROUND_DARK)
@@ -254,8 +282,7 @@ when BRAGI_DEBUG {
             )
         }
 
-        {
-            // tabs
+        { // tabs
             pen_for_tabs := Vector2{1, _font_bold.line_height + 7}
 
             for tab, index in Debug_Tab {
@@ -287,8 +314,10 @@ when BRAGI_DEBUG {
                 }
             }
         }
+    }
 
-        main_pen := Vector2{16, (_title_height * 2)}
+    DEBUG_draw_window :: proc() {
+        main_pen := Vector2{16, (_title_height * 2) - i32(_scrolling)}
         set_custom_color(FOREGROUND, _font_regular.texture)
 
         set_custom_color(FOREGROUND, _font_bold.texture)
@@ -298,7 +327,9 @@ when BRAGI_DEBUG {
 
         switch _debug.current_tab {
         case .Frame_Info:
-            main_pen.y += CHART_MAX_HEIGHT + 20
+            main_pen.y += SECTION_SPACING
+
+            main_pen.y += CHART_MAX_HEIGHT
             bar_width := f32(DEBUG_WINDOW_SIZE - 32)/f32(MAX_SNAPSHOT_LEN)
             chart_left := f32(main_pen.x)
             scale := f32(1.0/_debug.fps_chart_top)
@@ -322,10 +353,10 @@ when BRAGI_DEBUG {
                 draw_rect_f32(chart_left + f32(index) * bar_width, f32(main_pen.y), bar_width, -height)
             }
 
-            {
-                avg_line_pen := Vector2{16, main_pen.y - i32(avg_fps_line_height)}
-                max_line_pen := Vector2{16, main_pen.y - i32(max_fps_line_height)}
-                min_line_pen := Vector2{16, main_pen.y - i32(min_fps_line_height)}
+            { // FPS
+                avg_line_pen := Vector2{main_pen.x, main_pen.y - i32(avg_fps_line_height)}
+                max_line_pen := Vector2{main_pen.x, main_pen.y - i32(max_fps_line_height)}
+                min_line_pen := Vector2{main_pen.x, main_pen.y - i32(min_fps_line_height)}
                 fps_line_width := DEBUG_WINDOW_SIZE - avg_line_pen.x * 2
                 fps_line_height: i32 = 2
 
@@ -355,19 +386,58 @@ when BRAGI_DEBUG {
                 draw_text(_font_regular, avg_text_pen, avg_fps_str)
                 draw_rect(avg_line_pen.x, avg_line_pen.y, fps_line_width, fps_line_height)
             }
+
+            { // frametime
+                main_pen.y += SECTION_SPACING
+
+                LINE_CHART_HEIGHT :: 40
+
+                main_pen = draw_text(_font_bold, main_pen, "Frametimes\n")
+                main_pen.y += 10
+
+                set_custom_color(BACKGROUND_DARK, _font_regular.texture)
+
+                set_custom_color(BLUE)
+                high_frametime_str := fmt.tprintf("%.2fms", _debug.ft_highest)
+                high_frametime_pen := main_pen
+                high_frametime_pen.x = DEBUG_WINDOW_SIZE - main_pen.x * 2 - i32(len(high_frametime_str)) * _font_regular.em_width
+                high_frametime_pen.y += 2
+                draw_rect(
+                    main_pen.x, main_pen.y,
+                    DEBUG_WINDOW_SIZE - main_pen.x * 2, LINE_CHART_HEIGHT,
+                )
+                draw_text(_font_regular, high_frametime_pen, high_frametime_str)
+
+                set_custom_color(GREEN)
+                curr_proportion := max(_debug.ft_current/_debug.ft_highest, 0.5)
+                curr_frametime_str := fmt.tprintf("%.2fms", _debug.ft_current)
+                curr_frametime_pen := main_pen
+                curr_frametime_pen.x = i32(DEBUG_WINDOW_SIZE * curr_proportion) - i32(len(curr_frametime_str)) * _font_regular.em_width
+                curr_frametime_pen.y += 2
+                draw_rect(
+                    main_pen.x, main_pen.y,
+                    i32(DEBUG_WINDOW_SIZE * curr_proportion), LINE_CHART_HEIGHT,
+                )
+                draw_text(_font_regular, curr_frametime_pen, curr_frametime_str)
+
+                set_custom_color(YELLOW)
+                low_proportion := 0.25
+                low_frametime_str := fmt.tprintf("%.2fms", _debug.ft_lowest)
+                low_frametime_pen := main_pen
+                low_frametime_pen.x = i32(DEBUG_WINDOW_SIZE * low_proportion) - i32(len(low_frametime_str)) * _font_regular.em_width
+                low_frametime_pen.y += 2
+                draw_rect(
+                    main_pen.x, main_pen.y,
+                    i32(DEBUG_WINDOW_SIZE * low_proportion), LINE_CHART_HEIGHT,
+                )
+                draw_text(_font_regular, low_frametime_pen, low_frametime_str)
+            }
+        case .Buffer:
         case .Memory:
 
         case .Logs:
 
         }
-
-        set_target()
-        _debug.rect.h = DEBUG_WINDOW_SIZE
-        if _debug.minimized {
-            _debug.rect.h = f32(_title_height)
-        }
-        src_rect := Rect{0, 0, _debug.rect.w, _debug.rect.h}
-        draw_texture(_debug.texture, &src_rect, &_debug.rect)
     }
 } else {
     @(private)
