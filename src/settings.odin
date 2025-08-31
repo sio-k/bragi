@@ -39,9 +39,6 @@ Face_Color :: enum u8 {
     ui_modeline_active_highlight,
     ui_modeline_inactive_background,
     ui_modeline_inactive_foreground,
-
-    debug_background,
-    debug_foreground,
 }
 
 Tab_Character :: enum {
@@ -124,9 +121,6 @@ settings_init :: proc() {
 
     colorscheme[.ui_modeline_inactive_background]   = hex_to_color(0x010101)
     colorscheme[.ui_modeline_inactive_foreground]   = hex_to_color(0x616161)
-
-    colorscheme[.debug_background] = {16, 16, 16, 150}
-    colorscheme[.debug_foreground] = {255, 255, 255, 255}
 
     _settings_setup_basic_bragi_keybindings()
 }
