@@ -21,7 +21,6 @@ VERSION :: "0.01"
 ICON    :: #load(RUN_TREE_DIR + "/icons/bragi-icon_large.png")
 
 BRAGI_DEBUG :: #config(BRAGI_DEBUG, false) // enables functionality in debug.odin
-BRAGI_SLOW  :: #config(BRAGI_SLOW, false)  // enables 30 FPS mode
 
 RUN_TREE_DIR :: "../res"
 
@@ -68,7 +67,6 @@ modifiers_queue:   [dynamic]string
 bragi_allocator:   runtime.Allocator
 bragi_context:     runtime.Context
 bragi_running:     bool
-bragi_first_frame: bool
 
 // TODO(nawe) this should probably be an arena allocator that will contain
 // the editor settings and array of panes and buffers. The buffer content
@@ -221,13 +219,28 @@ main :: proc() {
                 should_resize_window_to_mininum := false
                 window_in_focus = v.window_focused
 
+                if v.dpi_scale != dpi_scale {
+                    log.debugf("updating necessary stuff after DPI change")
+                    dpi_scale = v.dpi_scale
+                    initialize_font_related_stuff()
+                }
+
                 if window_width != v.window_width || window_height != v.window_height {
                     if v.window_width < MINIMUM_WINDOW_SIZE || v.window_height < MINIMUM_WINDOW_SIZE {
                         should_resize_window_to_mininum = true
                     }
 
-                    window_width = v.window_width if v.window_width > MINIMUM_WINDOW_SIZE else MINIMUM_WINDOW_SIZE
-                    window_height = v.window_height if v.window_height > MINIMUM_WINDOW_SIZE else MINIMUM_WINDOW_SIZE
+                    if v.window_width > MINIMUM_WINDOW_SIZE {
+                        window_width = v.window_width
+                    } else {
+                        window_width = MINIMUM_WINDOW_SIZE
+                    }
+
+                    if v.window_height > MINIMUM_WINDOW_SIZE {
+                        window_height = v.window_height
+                    } else {
+                        window_height = MINIMUM_WINDOW_SIZE
+                    }
 
                     if should_resize_window_to_mininum {
                         platform_resize_window(window_width, window_height)
@@ -250,13 +263,13 @@ main :: proc() {
         update_active_pane()
         draw_panes()
         update_and_draw_widget()
-        DEBUG_update_draw()
+        DEBUG_draw()
         draw_frame()
 
         platform_sleep()
 
         frame_delta_time = time.tick_lap_time(&previous_frame_time)
-        bragi_first_frame = true
+        DEBUG_update()
         free_all(context.temp_allocator)
     }
 

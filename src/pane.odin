@@ -229,6 +229,7 @@ draw_panes :: proc() {
 
 update_pane_font :: #force_inline proc(pane: ^Pane) {
     scaled_character_height := font_to_scaled_pixels(pane.local_font_size)
+    log.debug(scaled_character_height)
     pane.font = get_font_with_size(FONT_EDITOR_NAME, FONT_EDITOR_DATA, scaled_character_height)
 }
 

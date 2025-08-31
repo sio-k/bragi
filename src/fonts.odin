@@ -13,6 +13,7 @@ Font_Face :: enum {
     UI_Italic,
     UI_Bold,
     UI_Small,
+    UI_XSmall,
     Icons,
 }
 
@@ -99,12 +100,14 @@ initialize_font_related_stuff :: proc() {
     scaled_font_ui_size     := font_to_scaled_pixels(f32(settings.ui_font_size))
     scaled_font_icons_size  := font_to_scaled_pixels(f32(settings.ui_font_size), 0, 1.33)
     scaled_font_small_size  := font_to_scaled_pixels(f32(settings.ui_font_size), -4)
+    scaled_font_xsmall_size := font_to_scaled_pixels(10)
 
-    fonts_map[.UI_Regular] = get_font_with_size(FONT_UI_NAME,        FONT_UI_DATA,        scaled_font_ui_size   )
-    fonts_map[.UI_Italic]  = get_font_with_size(FONT_UI_ITALIC_NAME, FONT_UI_ITALIC_DATA, scaled_font_ui_size   )
-    fonts_map[.UI_Bold]    = get_font_with_size(FONT_UI_BOLD_NAME,   FONT_UI_BOLD_DATA,   scaled_font_ui_size   )
-    fonts_map[.UI_Small]   = get_font_with_size(FONT_UI_NAME,        FONT_UI_DATA,        scaled_font_small_size)
-    fonts_map[.Icons]      = get_font_with_size(FONT_ICONS_NAME,     FONT_ICONS_DATA,     scaled_font_icons_size)
+    fonts_map[.UI_Regular] = get_font_with_size(FONT_UI_NAME,        FONT_UI_DATA,        scaled_font_ui_size    )
+    fonts_map[.UI_Italic]  = get_font_with_size(FONT_UI_ITALIC_NAME, FONT_UI_ITALIC_DATA, scaled_font_ui_size    )
+    fonts_map[.UI_Bold]    = get_font_with_size(FONT_UI_BOLD_NAME,   FONT_UI_BOLD_DATA,   scaled_font_ui_size    )
+    fonts_map[.UI_Small]   = get_font_with_size(FONT_UI_NAME,        FONT_UI_DATA,        scaled_font_small_size )
+    fonts_map[.UI_XSmall]  = get_font_with_size(FONT_UI_NAME,        FONT_UI_DATA,        scaled_font_xsmall_size)
+    fonts_map[.Icons]      = get_font_with_size(FONT_ICONS_NAME,     FONT_ICONS_DATA,     scaled_font_icons_size )
 
     // each pane has its own font, so we only preload the default size
     // and we don't store it in fonts_map. The UI of the editor should
@@ -121,7 +124,9 @@ initialize_font_related_stuff :: proc() {
 }
 
 font_to_scaled_pixels :: proc(pt: f32, size_diff: f32 = 0, scale: f32 = 1.0) -> i32 {
-    result := math.ceil(((f32(pt) + size_diff) * dpi_scale) * scale)
+    result := i32(math.ceil(((f32(pt) + size_diff) * dpi_scale) * scale))
+    mod := result % 4
+    result -= mod
     return clamp(i32(result), MINIMUM_FONT_SIZE, MAXIMUM_FONT_SIZE)
 }
 
