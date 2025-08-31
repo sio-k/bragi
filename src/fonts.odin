@@ -117,17 +117,12 @@ initialize_font_related_stuff :: proc() {
             FONT_EDITOR_NAME, FONT_EDITOR_DATA, scaled_font_editor_size,
         ), COMMON_CHARACTERS,
     )
-    prepare_text(fonts_map[.UI_Regular], COMMON_CHARACTERS)
-    prepare_text(fonts_map[.UI_Italic],  COMMON_CHARACTERS)
-    prepare_text(fonts_map[.UI_Bold],    COMMON_CHARACTERS)
-    prepare_text(fonts_map[.UI_Small],   "0123456789") // usually used for numbers
+    prepare_text(fonts_map[.UI_Small],   "0123456789") // tipically used for numbers
 }
 
 font_to_scaled_pixels :: proc(pt: f32, size_diff: f32 = 0, scale: f32 = 1.0) -> i32 {
     result := i32(math.ceil(((f32(pt) + size_diff) * dpi_scale) * scale))
-    mod := result % 4
-    result -= mod
-    return clamp(i32(result), MINIMUM_FONT_SIZE, MAXIMUM_FONT_SIZE)
+    return clamp(result, MINIMUM_FONT_SIZE, MAXIMUM_FONT_SIZE)
 }
 
 get_font_with_size :: proc(name: string, data: []byte, character_height: i32) -> ^Font {

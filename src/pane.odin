@@ -616,6 +616,10 @@ maybe_scroll_pane_to_cursor_view :: proc(pane: ^Pane) {
         has_scrolled = true
     }
 
+    // we do -1 here because some fonts, with scaling, might render
+    // below the visual line of the modeline. Maybe this can be solved
+    // by making visible_rows a floating point variable, but for now,
+    // this just works well and feels very responsive.
     for coords.row >= pane.visible_rows + pane.y_offset - 1 {
         pane.y_offset += 1
         has_scrolled = true
