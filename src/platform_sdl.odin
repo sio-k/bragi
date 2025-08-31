@@ -177,6 +177,20 @@ platform_update_events :: proc() {
 
                 input_register(wevent)
             }
+            case .MOUSE_BUTTON_DOWN, .MOUSE_BUTTON_UP, .MOUSE_WHEEL: {
+                mouse := Event_Mouse{}
+
+                if event.type == .MOUSE_WHEEL {
+                    mouse.scroll_x = event.wheel.x
+                    mouse.scroll_y = event.wheel.y
+                } else {
+                    mouse.button = Mouse_Button(event.button.button)
+                    mouse.clicks = event.button.clicks
+                    mouse.down   = event.button.down
+                }
+
+                input_register(mouse)
+            }
             case .KEY_DOWN: {
                 key := u32(sdl.GetKeyFromScancode(event.key.scancode, event.key.mod, false))
                 key_without_shift := u32(sdl.GetKeyFromScancode(event.key.scancode, event.key.mod - sdl.KMOD_SHIFT, false))
@@ -248,4 +262,12 @@ platform_key_name :: proc(key: u32) -> string {
 
 platform_resize_window :: #force_inline proc(w, h: i32) {
     sdl.SetWindowSize(window, w, h)
+}
+
+platform_get_mouse_position :: proc() -> (f32, f32) {
+    mx, my: f32
+    _ = sdl.GetMouseState(&mx, &my)
+    mx *= dpi_scale
+    my *= dpi_scale
+    return mx, my
 }

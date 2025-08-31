@@ -44,9 +44,6 @@ window_width:    i32  = DEFAULT_WINDOW_SIZE
 window_in_focus: bool = true
 dpi_scale:       f32  = 1.0
 
-mouse_x: i32
-mouse_y: i32
-
 frame_delta_time:      time.Duration
 
 DEFAULT_SETTINGS_DATA :: #load(RUN_TREE_DIR + "/settings.bragi")
@@ -61,12 +58,12 @@ open_buffers:  [dynamic]^Buffer
 open_panes:    [dynamic]^Pane
 global_widget: Widget
 
-base_working_dir:    string
-last_search_term:    string
-commands_map:        map[string]Command
-events_this_frame:   [dynamic]Event
-last_keystroke:      time.Tick
-modifiers_queue:     [dynamic]string
+base_working_dir:  string
+last_search_term:  string
+commands_map:      map[string]Command
+events_this_frame: [dynamic]Event
+last_keystroke:    time.Tick
+modifiers_queue:   [dynamic]string
 
 bragi_allocator:   runtime.Allocator
 bragi_context:     runtime.Context
@@ -200,6 +197,13 @@ main :: proc() {
                 event.handled = handled
                 last_keystroke = time.tick_now()
             case Event_Mouse:
+                DEBUG_handle_input(event)
+
+                // mouse events are not really important for Bragi, we
+                // expect the user to prefer keyboard input when
+                // navigating and using it, so we don't debug these
+                // events too much.
+                event.handled = true
             case Event_Quit:
                 bragi_running = false
                 event.handled = true

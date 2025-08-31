@@ -99,6 +99,10 @@ set_color_from_token :: #force_inline proc(kind: Token_Kind, texture: ^Texture) 
     sdl.SetTextureColorMod(texture, c.r, c.g, c.b)
 }
 
+set_transparency :: #force_inline proc(texture: ^Texture, value: f32) {
+    sdl.SetTextureAlphaModFloat(texture, value)
+}
+
 set_target :: #force_inline proc(target: ^Texture = nil) {
     sdl.SetRenderTarget(renderer, target)
 }

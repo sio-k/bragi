@@ -270,11 +270,12 @@ Key_Code :: enum u32 {
 }
 
 Mouse_Button :: enum u8 {
-    Left    = 0,
-    Middle  = 1,
-    Right   = 2,
-    Extra_1 = 3,
-    Extra_2 = 4,
+    None    = 0,
+    Left    = 1,
+    Middle  = 2,
+    Right   = 3,
+    Extra_1 = 4,
+    Extra_2 = 5,
 }
 
 Key_Mod :: enum u8 {
@@ -320,10 +321,11 @@ Event_Keyboard :: struct {
 }
 
 Event_Mouse :: struct {
-    button_pressed: Mouse_Button,
-    mouse_x:        i32,
-    mouse_y:        i32,
-    wheel_scroll:   i32,
+    button:   Mouse_Button,
+    clicks:   u8,
+    down:     bool,
+    scroll_x: f32,
+    scroll_y: f32,
 }
 
 Event_Quit :: struct {}
