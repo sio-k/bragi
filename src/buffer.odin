@@ -42,7 +42,7 @@ Buffer :: struct {
     line_starts:      [dynamic]int,
     tokens:           [dynamic]Token_Kind,
 
-    indent: struct {
+    indent:           struct {
         tab_char: Tab_Character,
         tab_size: int,
     },
@@ -115,7 +115,36 @@ buffer_init :: proc(buffer: ^Buffer, contents: []byte, allocator := context.allo
     buffer.indent.tab_size = settings.default_tab_size
     flag_buffer(buffer, {.Dirty})
 
+    // checking for the tabulation size
+    count_done := false
+    start_count := false
+    count := 0
+
     for b in contents {
+        if settings.derive_indentation_from_file {
+            if !count_done && start_count {
+                if b == '\t' {
+                    start_count = false
+                    count_done = true
+                    buffer.indent.tab_char = .tab
+                } else if b == ' ' {
+                    count += 1
+                } else {
+                    start_count = false
+
+                    if count > 0 {
+                        count_done = true
+                        buffer.indent.tab_char = .space
+                        buffer.indent.tab_size = count
+                    }
+                }
+            }
+
+            if !count_done && b == '\n' {
+                start_count = true
+            }
+        }
+
         if b == '\r' {
             // remove carriage returns
             flag_buffer(buffer, {.CRLF, .Modified})

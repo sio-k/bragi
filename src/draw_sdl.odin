@@ -351,7 +351,7 @@ draw_modeline :: proc(pane: ^Pane) {
     profiling_start("drawing modeline")
     is_focused := is_pane_focused(pane)
 
-    font := fonts_map[.UI_Regular]
+    font_regular := fonts_map[.UI_Regular]
     font_bold := fonts_map[.UI_Bold]
     font_italic := fonts_map[.UI_Italic]
 
@@ -368,7 +368,7 @@ draw_modeline :: proc(pane: ^Pane) {
         if global_widget.active do modeline_y_pos -= i32(global_widget.rect.h)
     }
 
-    y_offset_for_centering := (modeline_height - font.line_height)/2
+    y_offset_for_centering := (modeline_height - font_regular.line_height)/2
 
     left_pen := Vector2{0, modeline_y_pos  + y_offset_for_centering}
     right_pen := Vector2{i32(pane.rect.w), left_pen.y}
@@ -378,16 +378,16 @@ draw_modeline :: proc(pane: ^Pane) {
     draw_rect(0, modeline_y_pos, modeline_width, modeline_height)
 
     if modified {
-        set_colors(modeline_highlight, {font.texture, font_bold.texture})
+        set_colors(modeline_highlight, {font_regular.texture, font_bold.texture})
     } else {
-        set_colors(modeline_foreground, {font.texture, font_bold.texture})
+        set_colors(modeline_foreground, {font_regular.texture, font_bold.texture})
     }
 
     status_str := fmt.tprintf(
         " {} ",
         modified ? "+" : "-",
     )
-    left_pen = draw_text(font, left_pen, status_str)
+    left_pen = draw_text(font_regular, left_pen, status_str)
     left_pen = draw_text(font_bold, left_pen, pane.buffer.name)
 
     if is_crlf(pane.buffer) {
@@ -395,23 +395,31 @@ draw_modeline :: proc(pane: ^Pane) {
         left_pen = draw_text(font_italic, left_pen, " [CRLF replaced with LF] ")
     }
 
-    set_color(modeline_foreground, font.texture)
+    set_color(modeline_foreground, font_regular.texture)
     if len(pane.cursors) == 1 {
         // using the buffer lines for these coords, we want to know the real position of the cursor
         coords := cursor_offset_to_coords(pane, pane.buffer.line_starts[:], pane.cursors[0].pos)
-        left_pen = draw_text(font, left_pen, fmt.tprintf(" ({}, {}) ", coords.row + 1, coords.column))
+        left_pen = draw_text(font_regular, left_pen, fmt.tprintf(" ({}, {}) ", coords.row + 1, coords.column))
     } else {
         // TODO(nawe) maybe show the position of the active cursor
-        left_pen = draw_text(font, left_pen, fmt.tprintf(" ({} cursors)", len(pane.cursors)))
+        left_pen = draw_text(font_regular, left_pen, fmt.tprintf(" ({} cursors)", len(pane.cursors)))
     }
 
     // only show this side if there's space for it. Hopefully this is sufficient.
     if pane.rect.w > MINIMUM_WINDOW_SIZE * 0.8 {
-        set_color(modeline_foreground, font_bold.texture)
-        major_mode_name := get_major_mode_name(pane.buffer)
-        major_mode_width := prepare_text(font_bold, major_mode_name)
-        right_pen.x -= major_mode_width + font_bold.em_width
-        draw_text(font_bold, right_pen, major_mode_name)
+        indent_str: string
+        if pane.buffer.indent.tab_char == .tab {
+            indent_str = "Tab  "
+        } else {
+            indent_str = fmt.tprintf("Space({})  ", pane.buffer.indent.tab_size)
+        }
+
+        set_colors(modeline_foreground, {font_regular.texture, font_bold.texture})
+        major_mode_str := get_major_mode_name(pane.buffer)
+        right_side_width := i32(len(indent_str) + len(major_mode_str) + 1) * font_bold.em_width
+        right_pen.x -= right_side_width
+        right_pen = draw_text(font_regular, right_pen, indent_str)
+        draw_text(font_bold, right_pen, major_mode_str)
     }
     profiling_end()
 }

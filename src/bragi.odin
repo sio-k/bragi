@@ -14,6 +14,7 @@ when BRAGI_DEBUG {
 } else {
     NAME :: "Bragi"
 }
+
 ID      :: "bragi"
 AUTHOR  :: "Nahuel J. Sacchetti"
 URL     :: "https://github.com/nawetimebomb/bragi"

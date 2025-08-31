@@ -65,6 +65,8 @@ Settings :: struct {
 
     default_tab_size:         int,
     default_tab_character:    Tab_Character,
+    derive_indentation_from_file: bool,
+
     show_line_numbers:        bool,
     maximize_window_on_start: bool,
     modeline_position:        Modeline_Position,
@@ -82,6 +84,8 @@ settings_init :: proc() {
 
     settings.default_tab_size         = 4
     settings.default_tab_character    = .space
+    settings.derive_indentation_from_file = true
+
     settings.show_line_numbers        = true
     settings.maximize_window_on_start = true
     settings.modeline_position        = .bottom
