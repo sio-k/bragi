@@ -72,7 +72,7 @@ tokenize_buffer :: proc(buffer: ^Buffer, starting_offset := 0) {
     if tokenize_proc == nil do return
     tokenize_proc(buffer, starting_offset)
     // add the EOF token so we always have tokens.
-    assign_at(&buffer.tokens, len(buffer.text_content.buf) + 1, Token_Kind.EOF)
+    assign_at(&buffer.tokens, len(buffer.text) + 1, Token_Kind.EOF)
 }
 
 get_indentation_tokens :: proc(buffer: ^Buffer, text: string) -> []Indentation_Token {

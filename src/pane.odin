@@ -4,7 +4,6 @@ import "core:encoding/uuid"
 import "core:fmt"
 import "core:log"
 import "core:slice"
-import "core:strings"
 import "core:time"
 import "core:unicode/utf8"
 
@@ -40,7 +39,6 @@ Pane :: struct {
     cursor_blink_timer:  time.Tick,
 
     buffer:              ^Buffer,
-    contents:            string,
     regions:             [dynamic]Highlight,
     wrapped_line_starts: [dynamic]int,
     local_font_size:     f32,
@@ -76,7 +74,7 @@ Code_Line :: struct {
     tokens:             []Token_Kind,
 }
 
-pane_create :: proc(buffer: ^Buffer = nil) -> ^Pane {
+pane_create :: proc(pane: ^Pane = nil) -> ^Pane {
     log.debug("creating new pane")
     result := new(Pane)
 
@@ -84,22 +82,25 @@ pane_create :: proc(buffer: ^Buffer = nil) -> ^Pane {
     result.cursor_showing = true
     result.cursor_blink_count = 0
     result.cursor_blink_timer = time.tick_now()
-    add_cursor(result)
+    result.local_font_size = f32(settings.editor_font_size)
 
     if settings.always_wrap_lines {
         flag_pane(result, {.Line_Wrappings})
     }
 
-    if buffer == nil {
+    if pane == nil {
+        add_cursor(result)
         result.buffer = buffer_get_or_create_empty()
     } else {
-        result.buffer = buffer
+        delete(result.cursors)
+        result.cursors = slice.clone_to_dynamic(pane.cursors[:])
+        result.buffer = pane.buffer
+        result.local_font_size = pane.local_font_size
     }
-
-    result.local_font_size = f32(settings.editor_font_size)
 
     append(&open_panes, result)
     update_all_pane_textures()
+    maybe_scroll_pane_to_cursor_view(result)
     return result
 }
 
@@ -112,9 +113,9 @@ pane_destroy :: proc(pane: ^Pane) {
 }
 
 update_active_pane :: proc() {
-    should_cursor_blink :: proc(p: ^Pane) -> bool {
-        return p.cursor_blink_count < CURSOR_BLINK_MAX_COUNT &&
-            time.tick_diff(p.cursor_blink_timer, time.tick_now()) > CURSOR_BLINK_TIMEOUT
+    should_cursor_blink :: proc(pane: ^Pane) -> bool {
+        return pane.cursor_blink_count < CURSOR_BLINK_MAX_COUNT &&
+            time.tick_diff(pane.cursor_blink_timer, time.tick_now()) > CURSOR_BLINK_TIMEOUT
     }
     profiling_start("active_pane")
     pane := active_pane
@@ -194,7 +195,7 @@ draw_panes :: proc() {
             code_line := Code_Line{}
             start, end := get_line_boundaries(line_number, lines)
             code_line.start_offset = start
-            code_line.line = pane.contents[start:end]
+            code_line.line = pane.buffer.text[start:end]
             code_line.line_is_wrapped = is_line_wrapped(pane, line_number)
 
             if end <= len(pane.buffer.tokens) {
@@ -229,7 +230,6 @@ draw_panes :: proc() {
 
 update_pane_font :: #force_inline proc(pane: ^Pane) {
     scaled_character_height := font_to_scaled_pixels(pane.local_font_size)
-    log.debug(scaled_character_height)
     pane.font = get_font_with_size(FONT_EDITOR_NAME, FONT_EDITOR_DATA, scaled_character_height)
 }
 
@@ -253,12 +253,12 @@ update_all_pane_textures :: proc() {
 
 recalculate_line_wrappings :: proc(pane: ^Pane) {
     should_carry_over :: proc(pane: ^Pane, offset: int) -> bool {
-        return pane.contents[offset] != ' ' && pane.contents[offset] != '\n'
+        return pane.buffer.text[offset] != ' ' && pane.buffer.text[offset] != '\n'
     }
 
     go_back_one :: proc(pane: ^Pane, offset: ^int) {
         offset^ -=1
-        for is_continuation_byte(pane.contents[offset^]) do offset^ -= 1
+        for is_continuation_byte(pane.buffer.text[offset^]) do offset^ -= 1
     }
 
     // less than this per line looks weird in code, so maybe we just
@@ -281,7 +281,7 @@ recalculate_line_wrappings :: proc(pane: ^Pane) {
 
     for line_index := 0; line_index < len(buffer_lines) - 1; line_index += 1 {
         start, end := get_line_boundaries(line_index, buffer_lines)
-        actual_columns := utf8.rune_count_in_string(pane.contents[start:end])
+        actual_columns := utf8.rune_count_in_string(pane.buffer.text[start:end])
 
         append(&pane.wrapped_line_starts, start)
 
@@ -291,7 +291,7 @@ recalculate_line_wrappings :: proc(pane: ^Pane) {
             for offset := start; offset < end; offset += 1 {
                 count += 1
 
-                for offset < end && is_continuation_byte(pane.contents[offset]) do offset += 1
+                for offset < end && is_continuation_byte(pane.buffer.text[offset]) do offset += 1
 
                 if count >= max_column_space {
                     // go back to the beginning of the word, we only
@@ -317,7 +317,7 @@ recalculate_line_wrappings :: proc(pane: ^Pane) {
         }
     }
 
-    append(&pane.wrapped_line_starts, len(pane.contents) + 1)
+    append(&pane.wrapped_line_starts, len(pane.buffer.text) + 1)
 }
 
 flag_pane :: #force_inline proc(pane: ^Pane, flags: Pane_Flags) {
@@ -328,8 +328,8 @@ unflag_pane :: #force_inline proc(pane: ^Pane, flags: Pane_Flags) {
     pane.flags -= flags
 }
 
-add_cursor :: proc(p: ^Pane, pos := 0) {
-    append(&p.cursors, Cursor{
+add_cursor :: proc(pane: ^Pane, pos := 0) {
+    append(&pane.cursors, Cursor{
         active = true,
         pos = pos,
         sel = pos,
@@ -372,7 +372,7 @@ prepare_cursor_for_drawing :: #force_inline proc(
     if !is_within_viewport(pane, coords) do return true, {}, ' '
 
     pen = starting_pen
-    line_text := pane.contents[start:cursor.pos]
+    line_text := pane.buffer.text[start:cursor.pos]
 
     pen.x += prepare_text(font, line_text)
     if .Line_Wrappings not_in pane.flags {
@@ -381,8 +381,8 @@ prepare_cursor_for_drawing :: #force_inline proc(
     pen.y += i32(coords.row - pane.y_offset) * font.character_height
     rune_behind_cursor = ' '
 
-    if cursor.pos < len(pane.contents) {
-        rune_behind_cursor = utf8.rune_at(pane.contents, cursor.pos)
+    if cursor.pos < len(pane.buffer.text) {
+        rune_behind_cursor = utf8.rune_at(pane.buffer.text, cursor.pos)
     }
 
     return false, pen, rune_behind_cursor
@@ -398,7 +398,7 @@ is_within_viewport :: #force_inline proc(pane: ^Pane, coords: Coords) -> bool {
 cursor_offset_to_coords :: proc(pane: ^Pane, lines: []int, offset: int) -> (result: Coords) {
     result.row = get_line_index(offset, lines)
     start, end := get_line_boundaries(result.row, lines)
-    buf := pane.contents[start:end]
+    buf := pane.buffer.text[start:end]
     index := 0
 
     for index < offset - start {
@@ -413,7 +413,7 @@ cursor_offset_to_coords :: proc(pane: ^Pane, lines: []int, offset: int) -> (resu
 cursor_coords_to_offset :: proc(pane: ^Pane, lines: []int, coords: Coords) -> (offset: int) {
     offset = lines[coords.row]
     column := coords.column
-    buf := pane.contents
+    buf := pane.buffer.text
 
     for column > 0 {
         column -= 1
@@ -460,7 +460,7 @@ get_line_indent_count :: proc(pane: ^Pane, line_index: int, lines: []int) -> (le
     count_tabs := 0
 
     for index in start..<end {
-        b := pane.contents[index]
+        b := pane.buffer.text[index]
 
         if b == ' ' {
             count_spaces += 1
@@ -496,7 +496,7 @@ get_line_index :: #force_inline proc(offset: int, lines: []int) -> (line_index: 
 
 get_line_text :: #force_inline proc(pane: ^Pane, line_index: int, lines: []int) -> (result: string) {
     start, end := get_line_boundaries(line_index, lines)
-    return pane.contents[start:end]
+    return pane.buffer.text[start:end]
 }
 
 get_line_boundaries :: #force_inline proc(line_index: int, lines: []int) -> (start, end: int) {
@@ -579,7 +579,6 @@ switch_to_buffer :: proc(pane: ^Pane, buffer: ^Buffer) {
     }
 
     pane.buffer = buffer
-    pane.contents = strings.to_string(buffer.text_content)
     if .Line_Wrappings in pane.flags do recalculate_line_wrappings(pane)
     maybe_scroll_pane_to_cursor_view(pane)
     profiling_end()
@@ -617,7 +616,7 @@ maybe_scroll_pane_to_cursor_view :: proc(pane: ^Pane) {
         has_scrolled = true
     }
 
-    for coords.row >= pane.visible_rows + pane.y_offset {
+    for coords.row >= pane.visible_rows + pane.y_offset - 1 {
         pane.y_offset += 1
         has_scrolled = true
     }
@@ -634,7 +633,7 @@ translate_position :: proc(pane: ^Pane, pos: int, t: Translation, max_column := 
         return is_space(b) || b == '_'
     }
 
-    buf := pane.contents
+    buf := pane.buffer.text
     result = clamp(pos, 0, len(buf))
     lines := get_lines_array(pane)
 

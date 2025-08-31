@@ -1,7 +1,5 @@
 Bug/Mac: proper handling of left and right alt. Might need to internally rename the modifiers like Emacs does to Ctrl and Meta. Using Meta as the secondary modifier key. Meta would mean Alt for Windows/Linux and Alt for Mac. Also proper handling of the Command key. Check how Emacs handles CMD in Mac.
 
-Bug/Cursors: while in multiple cursors, and having a cursor at the end of a line and the another at the beginning of the following line, writing acts weirdly because it inserts the rune correctly for the lowest offset cursor but it doesn't respect the line feed and insert the next rune within an offset of 1, multiple inserts makes the highest offset cursor insert the text from right to left.
-
 Improvement/Buffer: make the buffer piece table to actually store the line starts and cache them. This is a big improvement for bigger files as after the first load we might just not need to fully calculate lines again. Maybe we can also cache the pieces that have changed.
 
 Improvements/Search: make search interactive. For example, allow a command to create a cursor on each search result.
@@ -19,6 +17,8 @@ Improvement/Speed/Piece Table Cache Absolute Line Starts And Buffer Positions: i
 Bug/Line Wrappings: when calculating where the line wrap is, we go back to get a full word to wrap, but if the word is too long (currently 20 characters long is too long), we just wrap on the spot. This wrap is causing a bounds issue where one of the characters is caught in nowhere and will not render. A little bit of an edge case but it matters.
 
 Improvement/Use Commands Instead Of Keys: some places are still using just keys, need to change these to commands so the rebinding works correctly.
+
+Feature/Mouse: add mouse support to pane/edit
   ----------------
  /   NICETIES   /
 ----------------

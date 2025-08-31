@@ -187,7 +187,7 @@ edit_mode_keyboard_event_handler :: proc(event: Event_Keyboard, cmd: Command) ->
 
     case .select_all:
         clear(&pane.cursors)
-        add_cursor(pane, len(pane.contents))
+        add_cursor(pane, len(buffer.text))
         pane.cursors[0].pos = 0
         return true
     case .select_start:
@@ -321,8 +321,7 @@ edit_mode_keyboard_event_handler :: proc(event: Event_Keyboard, cmd: Command) ->
         update_all_pane_textures()
         return true
     case .new_pane_to_the_right:
-        result := pane_create()
-        switch_to_buffer(result, buffer)
+        result := pane_create(pane)
         active_pane = result
         return true
     case .other_pane:
@@ -413,7 +412,7 @@ copy_selected_text :: proc(pane: ^Pane, keep_selection := false) {
         if !cursor.active do continue
         if !has_selection(cursor) do continue
         low, high := sorted_cursor(cursor)
-        strings.write_string(&text_to_copy, pane.contents[low:high])
+        strings.write_string(&text_to_copy, pane.buffer.text[low:high])
         if !keep_selection do cursor.sel = cursor.pos
     }
     platform_set_clipboard_text(strings.to_string(text_to_copy))
@@ -435,7 +434,7 @@ clone_to :: proc(pane: ^Pane, t: Translation) {
 
         if t == .up {
             cursor_to_clone: Cursor
-            lo_pos := len(pane.contents)
+            lo_pos := len(pane.buffer.text)
 
             for cursor in pane.cursors {
                 lo_pos = min(lo_pos, cursor.pos)
@@ -699,8 +698,8 @@ maybe_indent_and_go_to_tab_stop :: proc(pane: ^Pane) {
         }
 
         new_pos, _ := get_line_boundaries(coords.row, buffer_lines)
-        for new_pos < len(pane.contents) {
-            b := pane.contents[new_pos]
+        for new_pos < len(pane.buffer.text) {
+            b := pane.buffer.text[new_pos]
             if b != ' ' && b != '\t' do break
             new_pos += 1
         }
@@ -715,7 +714,7 @@ maybe_indent_and_go_to_tab_stop :: proc(pane: ^Pane) {
     if len(unique_lines_to_indent) == 1 {
         line_index := unique_lines_to_indent[0]
         _indent_single_line(
-            pane.buffer, pane.contents,
+            pane.buffer, pane.buffer.text,
             line_index, buffer_lines,
             _on_indent_realign_active_pane_cursors,
         )

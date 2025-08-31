@@ -237,7 +237,7 @@ draw_gutter :: proc(pane: ^Pane) {
         if .Line_Wrappings in pane.flags do return
         left_indicator, right_indicator := get_gutter_indicators(font)
         start, end := get_line_boundaries(line_number, lines)
-        text := pane.contents[start:end]
+        text := pane.buffer.text[start:end]
         count := utf8.rune_count_in_string(text)
         visible_columns := get_pane_visible_columns(pane)
 

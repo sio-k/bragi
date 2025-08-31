@@ -2,7 +2,6 @@
 package main
 
 import "core:slice"
-import "core:strings"
 
 Jai_Tokenizer :: struct {
     using tokenizer: Tokenizer,
@@ -17,7 +16,7 @@ Token :: struct {
 @(private)
 tokenize_jai :: proc(buffer: ^Buffer, starting_offset := 0) {
     tokenizer: Jai_Tokenizer
-    tokenizer.buf = strings.to_string(buffer.text_content)
+    tokenizer.buf = buffer.text
     tokenizer.starting_offset = starting_offset
 
     for {

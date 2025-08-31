@@ -34,10 +34,11 @@ Buffer :: struct {
     uuid:             uuid.Identifier,
 
     cursors:          []Cursor, // for undo/redo and switch buffer, a copy to the pane's cursors
-    original_source:  strings.Builder,
-    add_source:       strings.Builder,
+    original_source:  strings.Builder, // to load the file
+    add_source:       strings.Builder, // to add text
+    text_buffer:      strings.Builder, // to save the results
+    text:             string,
     pieces:           [dynamic]Piece,
-    text_content:     strings.Builder,
     line_starts:      [dynamic]int,
     tokens:           [dynamic]Token_Kind,
 
@@ -219,21 +220,21 @@ buffer_save :: proc(buffer: ^Buffer) {
 
     // ensure file ends in newline to be POSIX compliant
     temp_builder := strings.builder_make(context.temp_allocator)
-    buffer_len := len(buffer.text_content.buf)
-    buf := buffer.text_content.buf
+    buffer_len := len(buffer.text_buffer.buf)
+    buf := buffer.text_buffer.buf
     if buf[buffer_len - 1] != '\n' do strings.write_byte(&temp_builder, '\n')
 
     if len(temp_builder.buf) > 0 {
         temp_str := strings.to_string(temp_builder)
         insert_at(buffer, buffer_len, temp_str)
-        strings.write_string(&buffer.text_content, temp_str)
+        strings.write_string(&buffer.text_buffer, temp_str)
     }
 
     if settings.purge_trailing_whitespaces_on_save {
         changed := _purge_whitespaces_from_buffer(buffer)
         if changed {
-            strings.builder_reset(&buffer.text_content)
-            collect_pieces_from_buffer(buffer, &buffer.text_content, nil)
+            strings.builder_reset(&buffer.text_buffer)
+            collect_pieces_from_buffer(buffer, &buffer.text_buffer, nil)
         }
     }
 
@@ -250,7 +251,7 @@ buffer_save :: proc(buffer: ^Buffer) {
         }
     }
 
-    error := os.write_entire_file_or_err(buffer.filepath, buffer.text_content.buf[:])
+    error := os.write_entire_file_or_err(buffer.filepath, buffer.text_buffer.buf[:])
     if error != nil {
         log.fatalf("could not save buffer '{}' at {} due to {}", buffer.name, buffer.filepath, error)
         return
@@ -262,7 +263,7 @@ buffer_save :: proc(buffer: ^Buffer) {
 @(private="file")
 _purge_whitespaces_from_buffer :: proc(buffer: ^Buffer) -> (changed: bool) {
     whitespaces_to_remove := make([dynamic]Range, context.temp_allocator)
-    buf := buffer.text_content.buf
+    buf := buffer.text_buffer.buf
     whitespace_found := false
 
     // go byte by byte instead of rune by rune
@@ -331,7 +332,7 @@ _maybe_make_directories_recursive :: proc(check_dir: string) -> os.Error {
 buffer_destroy :: proc(buffer: ^Buffer) {
     strings.builder_destroy(&buffer.original_source)
     strings.builder_destroy(&buffer.add_source)
-    strings.builder_destroy(&buffer.text_content)
+    strings.builder_destroy(&buffer.text_buffer)
     undo_clear(buffer, &buffer.undo)
     undo_clear(buffer, &buffer.redo)
     delete(buffer.cursors)
@@ -364,16 +365,16 @@ update_opened_buffers :: proc() {
             profiling_start("putting pieces together and making lines array")
             unflag_buffer(buffer, {.Dirty})
             if len(buffer.pieces) == 0 do append(&buffer.pieces, _create_original_piece())
-            strings.builder_reset(&buffer.text_content)
+            strings.builder_reset(&buffer.text_buffer)
             clear(&buffer.line_starts)
-            collect_pieces_from_buffer(buffer, &buffer.text_content, &buffer.line_starts)
+            collect_pieces_from_buffer(buffer, &buffer.text_buffer, &buffer.line_starts)
+            buffer.text = strings.to_string(buffer.text_buffer)
             tokenize_buffer(buffer)
             profiling_end()
 
             profiling_start("passing buffer text to pane")
             for pane in open_panes {
                 if pane.buffer.uuid != buffer.uuid do continue
-                pane.contents = strings.to_string(buffer.text_content)
                 if .Line_Wrappings in pane.flags do recalculate_line_wrappings(pane)
                 flag_pane(pane, {.Need_Full_Repaint})
             }

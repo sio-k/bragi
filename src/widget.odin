@@ -807,7 +807,7 @@ _search_in_buffer_widget_update :: proc() {
     }
 
     // don't do anything if there's no content where we can search
-    if len(active_pane.contents) == 0 || len(query) == 0 do return
+    if len(active_pane.buffer.text) == 0 || len(query) == 0 do return
 
     // cleaning up because it was called from an already existing opened widget
     if len(global_widget.all_results) > 0 {
@@ -817,7 +817,7 @@ _search_in_buffer_widget_update :: proc() {
         clear(&active_pane.regions)
     }
 
-    buf := active_pane.contents
+    buf := active_pane.buffer.text
     buf_len := len(buf)
     left_index := 0
     right_index := buf_len - 1
@@ -885,7 +885,7 @@ _search_in_buffer_widget_update :: proc() {
 
     // find the closest offset
     pane_cursor := get_first_active_cursor(active_pane)
-    smallest_diff := len(active_pane.contents)
+    smallest_diff := len(active_pane.buffer.text)
     global_widget.y_offset = 0
 
     for result, index in global_widget.view_results {
@@ -1054,13 +1054,13 @@ _get_search_in_buffer_format :: proc(offset: int) -> string {
     end := start
     coords := cursor_offset_to_coords(pane, get_lines_array(pane), offset)
 
-    for r in pane.contents[start:] {
+    for r in pane.buffer.text[start:] {
         if r == '\n' do break
         if end - start == MAX_LENGTH do break
         end += 1
     }
 
-    search_result := fmt.tprintf("{}...", pane.contents[start:end])
+    search_result := fmt.tprintf("{}...", pane.buffer.text[start:end])
     line_column := fmt.tprintf("({}, {})", coords.row + 1, coords.column)
 
     result := strings.builder_make(context.temp_allocator)
