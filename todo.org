@@ -25,4 +25,3 @@ Feature/Marks: save pane/buffer marks for some user actions. Show the existing m
   ----------------
  /   NICETIES   /
 ----------------
-- Make the switch buffer command auto-select the first value.

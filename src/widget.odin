@@ -96,7 +96,7 @@ widget_open_find_buffer :: proc() {
     }
 
     // prefer most recent edited buffers... (not stable sorting but mostly cosmetic, not really important)
-    slice.sort_by(global_widget.all_results[:], proc(a: Widget_Result, b: Widget_Result) -> bool {
+    slice.stable_sort_by(global_widget.all_results[:], proc(a: Widget_Result, b: Widget_Result) -> bool {
         buf1, buf2 := a.value.(^Buffer), b.value.(^Buffer)
         return time.tick_since(buf1.last_backup_time) < time.tick_since(buf2.last_backup_time)
     })
@@ -108,6 +108,10 @@ widget_open_find_buffer :: proc() {
     })
 
     global_widget.view_results = slice.clone(global_widget.all_results[:])
+
+    if len(global_widget.view_results) > 0 {
+        global_widget.cursor.index = 0
+    }
 }
 
 widget_open_find_file :: proc() {
