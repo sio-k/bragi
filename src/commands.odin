@@ -22,6 +22,7 @@ Command :: enum u32 {
     remove_next_word,
 
     indent_or_tab_stop,
+    newline_and_indent,
 
     clone_cursor_above,
     clone_cursor_below,

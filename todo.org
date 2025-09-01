@@ -25,3 +25,5 @@ Feature/Marks: save pane/buffer marks for some user actions. Show the existing m
   ----------------
  /   NICETIES   /
 ----------------
+
+- Make tokenizer find function name and variable name so it can be used in a future go_to_definition

@@ -257,7 +257,12 @@ platform_get_clipboard_text :: proc() -> (result: string) {
 }
 
 platform_key_name :: proc(key: u32) -> string {
-    return string(sdl.GetKeyName(sdl.Keycode(key)))
+    result := string(sdl.GetKeyName(sdl.Keycode(key)))
+
+    // rename to a much better name of "Enter" instead of "Return"
+    if result == "Return" do result = "Enter"
+
+    return result
 }
 
 platform_resize_window :: #force_inline proc(w, h: i32) {

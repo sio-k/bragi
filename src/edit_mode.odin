@@ -15,34 +15,6 @@ edit_mode_keyboard_event_handler :: proc(event: Event_Keyboard, cmd: Command) ->
         return true
     }
 
-    // handle the generic ones first
-    #partial switch event.key_code {
-        case .K_BACKSPACE: {
-            t: Translation = .left
-
-            if .Ctrl in event.modifiers || .Alt in event.modifiers {
-                t = .prev_word
-            }
-
-            remove_to(pane, t)
-            return true
-        }
-        case .K_ENTER: {
-            insert_newlines_and_indent(pane)
-            return true
-        }
-        case .K_DELETE: {
-            t: Translation = .right
-
-            if .Ctrl in event.modifiers || .Alt in event.modifiers {
-                t = .next_word
-            }
-
-            remove_to(pane, t)
-            return true
-        }
-    }
-
     switch cmd {
     case .noop:      return false // not handled, it should report for now
     case .modifier:  // handled globally
@@ -83,6 +55,9 @@ edit_mode_keyboard_event_handler :: proc(event: Event_Keyboard, cmd: Command) ->
         }
         return true
 
+    case .newline_and_indent:
+        insert_newlines_and_indent(pane)
+        return true
     case .indent_or_tab_stop:
         maybe_indent_and_go_to_tab_stop(pane)
         return true

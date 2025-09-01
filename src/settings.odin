@@ -192,6 +192,7 @@ _settings_setup_basic_bragi_keybindings :: proc() {
     commands_map["CTRL-SHIFT-D"]     = .remove_next_word
 
     commands_map["TAB"]              = .indent_or_tab_stop
+    commands_map["ENTER"]            = .newline_and_indent
 
     commands_map["CTRL-X"]           = .cut_selection
     commands_map["CTRL-SHIFT-X"]     = .cut_line
