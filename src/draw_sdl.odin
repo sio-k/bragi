@@ -256,8 +256,9 @@ draw_gutter :: proc(pane: ^Pane) {
     line_number_character_height := font.line_height
     y_offset_for_centering := (regular_character_height - line_number_character_height)/2
     buffer_lines := pane.buffer.line_starts[:]
+    visible_rows := get_pane_visible_rows(pane)
     first_visible_row := pane.y_offset
-    last_visible_row := pane.y_offset + pane.visible_rows
+    last_visible_row := pane.y_offset + visible_rows
     last_line := len(buffer_lines) - 1
     gutter_size := get_gutter_size(pane)
     pen := Vector2{}

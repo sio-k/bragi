@@ -33,6 +33,7 @@ Translation :: enum u16 {
 Pane :: struct {
     uuid:                uuid.Identifier,
     cursors:             [dynamic]Cursor,
+    cursor_moved:        bool,
     cursor_selecting:    bool, // mode like region-mode in Emacs
     cursor_showing:      bool, // for rendering, hiding during blink interludes
     cursor_blink_count:  int,
@@ -50,7 +51,6 @@ Pane :: struct {
     texture:             ^Texture,
     x_offset:            int,
     y_offset:            int,
-    visible_rows:        int,
 }
 
 Cursor :: struct {
@@ -79,6 +79,7 @@ pane_create :: proc(pane: ^Pane = nil) -> ^Pane {
     result := new(Pane)
 
     result.uuid = uuid.generate_v6()
+    result.cursor_moved = true
     result.cursor_showing = true
     result.cursor_blink_count = 0
     result.cursor_blink_timer = time.tick_now()
@@ -100,7 +101,6 @@ pane_create :: proc(pane: ^Pane = nil) -> ^Pane {
 
     append(&open_panes, result)
     update_all_pane_textures()
-    maybe_scroll_pane_to_cursor_view(result)
     return result
 }
 
@@ -120,8 +120,6 @@ update_active_pane :: proc() {
     profiling_start("active_pane")
     pane := active_pane
 
-    pane.visible_rows = (int(pane.rect.h) / int(pane.font.line_height)) - 1
-
     if time.tick_diff(last_keystroke, time.tick_now()) < CURSOR_RESET_TIMEOUT {
         pane.cursor_showing = true
         pane.cursor_blink_count = 0
@@ -139,6 +137,11 @@ update_active_pane :: proc() {
         }
 
         flag_pane(pane, {.Need_Full_Repaint})
+    }
+
+    if pane.cursor_moved {
+        pane.cursor_moved = false
+        maybe_scroll_pane_to_cursor_view(pane)
     }
 
     profiling_end()
@@ -161,13 +164,14 @@ draw_panes :: proc() {
         set_color(.background)
         prepare_for_drawing()
 
+        visible_rows := get_pane_visible_rows(pane)
         size_of_gutter := get_gutter_size(pane)
         initial_pen := Vector2{size_of_gutter, 0}
         if settings.modeline_position == .top do initial_pen.y = get_modeline_height()
 
         lines := get_lines_array(pane)
         first_row := pane.y_offset
-        last_row := min(pane.y_offset + pane.visible_rows + 1, len(lines) - 1)
+        last_row := min(pane.y_offset + visible_rows + 1, len(lines) - 1)
         first_offset, last_offset := lines[first_row], lines[last_row]
         code_lines := make([dynamic]Code_Line, context.temp_allocator)
         highlights := make([dynamic]Highlight, 0, len(pane.cursors), context.temp_allocator)
@@ -245,7 +249,6 @@ update_all_pane_textures :: proc() {
 
         pane.rect = make_rect(pane_width * i32(index), 0, pane_width, pane_height)
         pane.texture = texture_create(.TARGET, i32(pane_width), i32(pane_height))
-        pane.visible_rows = (int(pane.rect.h) / int(pane.font.line_height)) - 1
         if .Line_Wrappings in pane.flags do recalculate_line_wrappings(pane)
         flag_pane(pane, {.Need_Full_Repaint})
     }
@@ -390,7 +393,7 @@ prepare_cursor_for_drawing :: #force_inline proc(
 
 is_within_viewport :: #force_inline proc(pane: ^Pane, coords: Coords) -> bool {
     last_column := get_pane_visible_columns(pane) + pane.x_offset
-    last_row := pane.visible_rows + pane.y_offset
+    last_row := get_pane_visible_rows(pane) + pane.y_offset
     return coords.column >= pane.x_offset && coords.column < last_column &&
         coords.row >= pane.y_offset && coords.row < last_row
 }
@@ -421,11 +424,6 @@ cursor_coords_to_offset :: proc(pane: ^Pane, lines: []int, coords: Coords) -> (o
         for offset < len(buf) && is_continuation_byte(buf[offset]) do offset += 1
     }
     return
-}
-
-is_in_line :: #force_inline proc(offset: int, lines: []int, line_index: int) -> bool {
-    start, end := get_line_boundaries(line_index, lines)
-    return offset >= start && offset <= end
 }
 
 is_line_wrapped :: proc(pane: ^Pane, line_index: int) -> bool {
@@ -483,15 +481,29 @@ get_line_indent_count :: proc(pane: ^Pane, line_index: int, lines: []int) -> (le
 }
 
 get_line_index :: #force_inline proc(offset: int, lines: []int) -> (line_index: int) {
-    for _, index in lines {
-        if is_in_line(offset, lines, index) do return index
+    if len(lines) < 2 do return 0
+
+    top_index := 0
+    bottom_index := len(lines) - 2
+    line_index = 0
+
+    if offset >= lines[bottom_index] {
+        line_index = bottom_index
+    } else {
+        for bottom_index - top_index > 1 {
+            middle_index := top_index + (bottom_index - top_index)/2
+
+            if offset < lines[middle_index] {
+                bottom_index = middle_index
+            } else {
+                top_index = middle_index
+            }
+        }
+
+        line_index = top_index
     }
 
-    // the empty buffer case will not be accomodating lines offsets,
-    // so we force a value of 0 here in those cases. For any other
-    // buffer, or as soon as that empty buffer has some content, this
-    // will be unreachable.
-    return 0
+    return
 }
 
 get_line_text :: #force_inline proc(pane: ^Pane, line_index: int, lines: []int) -> (result: string) {
@@ -558,6 +570,16 @@ get_pane_visible_columns :: proc(pane: ^Pane) -> (result: int) {
     return
 }
 
+get_pane_visible_rows :: proc(pane: ^Pane) -> (result: int) {
+    profiling_start("get_pane_visible_rows")
+    pane_height := pane.rect.h
+    font_height := f32(pane.font.line_height)
+    modeline_height := f32(get_modeline_height())
+    result = int((pane_height - modeline_height)/font_height)
+    return result
+
+}
+
 get_modeline_height :: #force_inline proc() -> i32 {
     MODELINE_PADDING :: 8
     font := fonts_map[.UI_Regular]
@@ -580,14 +602,16 @@ switch_to_buffer :: proc(pane: ^Pane, buffer: ^Buffer) {
 
     pane.buffer = buffer
     if .Line_Wrappings in pane.flags do recalculate_line_wrappings(pane)
-    maybe_scroll_pane_to_cursor_view(pane)
+    pane.cursor_moved = true
     profiling_end()
 }
 
 maybe_scroll_pane_to_cursor_view :: proc(pane: ^Pane) {
+    assert(.Dirty not_in pane.buffer.flags)
     lines := get_lines_array(pane)
+    visible_rows := get_pane_visible_rows(pane)
 
-    if len(lines) < pane.visible_rows {
+    if len(lines) < visible_rows {
         pane.y_offset = 0
         return
     }
@@ -616,11 +640,7 @@ maybe_scroll_pane_to_cursor_view :: proc(pane: ^Pane) {
         has_scrolled = true
     }
 
-    // we do -1 here because some fonts, with scaling, might render
-    // below the visual line of the modeline. Maybe this can be solved
-    // by making visible_rows a floating point variable, but for now,
-    // this just works well and feels very responsive.
-    for coords.row >= pane.visible_rows + pane.y_offset - 1 {
+    for coords.row >= visible_rows + pane.y_offset {
         pane.y_offset += 1
         has_scrolled = true
     }
@@ -640,6 +660,7 @@ translate_position :: proc(pane: ^Pane, pos: int, t: Translation, max_column := 
     buf := pane.buffer.text
     result = clamp(pos, 0, len(buf))
     lines := get_lines_array(pane)
+    visible_rows := get_pane_visible_rows(pane)
 
     switch t {
     case .start: result = 0
@@ -707,11 +728,11 @@ translate_position :: proc(pane: ^Pane, pos: int, t: Translation, max_column := 
         result = cursor_coords_to_offset(pane, lines, coords)
     case .prev_page:
         coords := cursor_offset_to_coords(pane, lines, result)
-        coords.row = max(coords.row - pane.visible_rows, 0)
+        coords.row = max(coords.row - visible_rows, 0)
         result = cursor_coords_to_offset(pane, lines, coords)
     case .next_page:
         coords := cursor_offset_to_coords(pane, lines, result)
-        coords.row = min(coords.row + pane.visible_rows, len(lines) - 1)
+        coords.row = min(coords.row + visible_rows, len(lines) - 1)
         result = cursor_coords_to_offset(pane, lines, coords)
     case .beginning_of_line:
         coords := cursor_offset_to_coords(pane, lines, result)

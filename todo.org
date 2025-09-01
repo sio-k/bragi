@@ -1,10 +1,12 @@
 Bug/Mac: proper handling of left and right alt. Might need to internally rename the modifiers like Emacs does to Ctrl and Meta. Using Meta as the secondary modifier key. Meta would mean Alt for Windows/Linux and Alt for Mac. Also proper handling of the Command key. Check how Emacs handles CMD in Mac.
 
+Bug/Line Wrappings: when calculating where the line wrap is, we go back to get a full word to wrap, but if the word is too long (currently 20 characters long is too long), we just wrap on the spot. This wrap is causing a bounds issue where one of the characters is caught in nowhere and will not render. A little bit of an edge case but it matters.
+
+Bug/Trailing Whitespace: when creating an empty line that is not wrapped, it is still looking at the next line anyways to figure out if the white space makes sense. This kinda works anyways because we don't want to show the trailing whitespace in these situtations, maybe? but at a minimum, it needs review.
+
 Improvement/Buffer: make the buffer piece table to actually store the line starts and cache them. This is a big improvement for bigger files as after the first load we might just not need to fully calculate lines again. Maybe we can also cache the pieces that have changed.
 
 Improvements/Search: make search interactive. For example, allow a command to create a cursor on each search result.
-
-Feature/Marks: save pane/buffer marks for some user actions. Show the existing marks on the pane fringe
 
 Maybe Bug/Cursor: when converting the cursor offset to coords and back, I'm using the passed line information. This might not be a good idea, since the only time we care about coords might be when we do something in the view, and then it should always use the pane lines (that could be the wrapped lines or regular buffer lines) but not an arbitrary line information.
 
@@ -14,11 +16,13 @@ Improvement/Window Resizing And System Display Scale: if the user changes their 
 
 Improvement/Speed/Piece Table Cache Absolute Line Starts And Buffer Positions: in order to not recreate the line offsets and collect pieces for when we do multi-line effect operations, making the Piece Table cache the absolute line offsets would make all this work easier and faster. Current speeds aren't that bad but we can make it a LOT better.
 
-Bug/Line Wrappings: when calculating where the line wrap is, we go back to get a full word to wrap, but if the word is too long (currently 20 characters long is too long), we just wrap on the spot. This wrap is causing a bounds issue where one of the characters is caught in nowhere and will not render. A little bit of an edge case but it matters.
-
 Improvement/Use Commands Instead Of Keys: some places are still using just keys, need to change these to commands so the rebinding works correctly.
 
 Feature/Mouse: add mouse support to pane/edit
+
+Feature/Marks: save pane/buffer marks for some user actions. Show the existing marks on the pane fringe
+
   ----------------
  /   NICETIES   /
 ----------------
+- Make the switch buffer command auto-select the first value.

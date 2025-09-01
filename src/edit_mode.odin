@@ -111,7 +111,7 @@ edit_mode_keyboard_event_handler :: proc(event: Event_Keyboard, cmd: Command) ->
         current_cursor_index -= 1
         if current_cursor_index < 0 do current_cursor_index = len(pane.cursors) - 1
         pane.cursors[current_cursor_index].active = true
-        maybe_scroll_pane_to_cursor_view(pane)
+        pane.cursor_moved = true
         return true
     case .next_cursor:
         if pane.cursor_selecting {
@@ -131,7 +131,7 @@ edit_mode_keyboard_event_handler :: proc(event: Event_Keyboard, cmd: Command) ->
         current_cursor_index += 1
         if current_cursor_index > len(pane.cursors) - 1 do current_cursor_index = 0
         pane.cursors[current_cursor_index].active = true
-        maybe_scroll_pane_to_cursor_view(pane)
+        pane.cursor_moved = true
         return true
     case .all_cursors:
         for &cursor in pane.cursors do cursor.active = true
@@ -490,7 +490,7 @@ move_to :: proc(pane: ^Pane, t: Translation, cursor_to_move: ^Cursor = nil) {
     }
 
     _maybe_merge_overlapping_cursors(pane)
-    maybe_scroll_pane_to_cursor_view(pane)
+    pane.cursor_moved = true
 }
 
 select_to :: proc(pane: ^Pane, t: Translation, cursor_to_select: ^Cursor = nil) {
@@ -606,6 +606,7 @@ insert_at_points :: proc(pane: ^Pane, text: string) {
         )
     }
 
+    pane.cursor_moved = true
     profiling_end()
 }
 
@@ -659,6 +660,7 @@ insert_newlines_and_indent :: proc(pane: ^Pane) {
         )
     }
 
+    pane.cursor_moved = true
     profiling_end()
 }
 
@@ -733,12 +735,17 @@ maybe_recenter_cursor :: proc(pane: ^Pane, force_recenter := false) {
     cursor := get_first_active_cursor(pane)
     lines := get_lines_array(pane)
     coords := cursor_offset_to_coords(pane, lines, cursor.pos)
+    visible_rows := get_pane_visible_rows(pane)
     top_edge := pane.y_offset
-    bottom_edge := pane.y_offset + pane.visible_rows
+    bottom_edge := pane.y_offset + visible_rows
     right_edge := get_pane_visible_columns(pane)
 
     if force_recenter || coords.row < top_edge || coords.row > bottom_edge {
-        pane.y_offset = max(coords.row - pane.visible_rows/2, 0)
+        if len(lines) < visible_rows {
+            pane.y_offset = 0
+        } else {
+            pane.y_offset = max(coords.row - visible_rows/2, 0)
+        }
 
         if coords.column < right_edge {
             pane.x_offset = 0
