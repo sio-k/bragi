@@ -40,16 +40,26 @@ tokenize_jai_indentation :: proc(buffer: ^Buffer, text: string) -> []Indentation
         indent: Indentation_Token
 
         #partial switch token.kind {
-            case .Punctuation: {
-                if punctuation, is_punctuation := token.variant.(Punctuation); is_punctuation {
-                    #partial switch punctuation {
-                        case .Brace_Left:    indent.action = .Open;  indent.kind = .Brace
-                        case .Brace_Right:   indent.action = .Close; indent.kind = .Brace
-                        case .Bracket_Left:  indent.action = .Open;  indent.kind = .Bracket
-                        case .Bracket_Right: indent.action = .Close; indent.kind = .Bracket
-                        case .Paren_Left:    indent.action = .Open;  indent.kind = .Paren
-                        case .Paren_Right:   indent.action = .Close; indent.kind = .Paren
-                    }
+        case .Keyword:
+            if token.text == "case" {
+                // case keywords in Jai need to close the previous block and open a new one...
+                indent0: Indentation_Token
+                indent0.action = .Close
+                indent0.kind = .Brace
+                append(&tokens, indent0)
+
+                indent.action = .Open
+                indent.kind = .Brace
+            }
+        case .Punctuation:
+            if punctuation, is_punctuation := token.variant.(Punctuation); is_punctuation {
+                #partial switch punctuation {
+                case .Brace_Left:    indent.action = .Open;  indent.kind = .Brace
+                case .Brace_Right:   indent.action = .Close; indent.kind = .Brace
+                case .Bracket_Left:  indent.action = .Open;  indent.kind = .Bracket
+                case .Bracket_Right: indent.action = .Close; indent.kind = .Bracket
+                case .Paren_Left:    indent.action = .Open;  indent.kind = .Paren
+                case .Paren_Right:   indent.action = .Close; indent.kind = .Paren
                 }
             }
         }
