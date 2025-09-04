@@ -164,6 +164,7 @@ edit_mode_keyboard_event_handler :: proc(event: Event_Keyboard, cmd: Command) ->
         clear(&pane.cursors)
         add_cursor(pane, len(buffer.text))
         pane.cursors[0].pos = 0
+        pane.cursor_moved = true
         return true
     case .select_start:
         select_to(pane, .start)
@@ -365,6 +366,7 @@ edit_mode_keyboard_event_handler :: proc(event: Event_Keyboard, cmd: Command) ->
         return true
     case .copy_selection:
         copy_selected_text(pane)
+        pane.cursor_selecting = false
         return true
     case .copy_line:
         select_to(pane, .end_of_line)
@@ -479,6 +481,7 @@ select_to :: proc(pane: ^Pane, t: Translation, cursor_to_select: ^Cursor = nil) 
     }
 
     _maybe_merge_overlapping_cursors(pane)
+    pane.cursor_moved = true
 }
 
 remove_to :: proc(pane: ^Pane, t: Translation) -> (total_amount_of_removed_characters: int) {
@@ -503,7 +506,7 @@ remove_to :: proc(pane: ^Pane, t: Translation) -> (total_amount_of_removed_chara
     }
 
     remove_selections(pane)
-
+    pane.cursor_moved = true
     profiling_end()
     return
 }
@@ -537,6 +540,7 @@ remove_selections :: proc(pane: ^Pane, array: ^[dynamic]Cursor = nil) {
     }
 
     pane.cursor_selecting = false
+    pane.cursor_moved = true
     _maybe_merge_overlapping_cursors(pane)
 }
 

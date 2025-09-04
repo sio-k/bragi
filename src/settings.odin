@@ -142,8 +142,9 @@ _settings_setup_basic_bragi_keybindings :: proc() {
     commands_map["ALT-S"] = .save_buffer
     commands_map["ALT-SHIFT-S"] = .save_buffer_as
 
-    commands_map["CTRL-S"] = .search_forward
+    commands_map["CTRL-S"]       = .search_forward
     commands_map["CTRL-SHIFT-S"] = .search_backward
+    commands_map["CTRL-R"]       = .search_backward
 
     commands_map["CTRL-1"] = .close_other_panes
     commands_map["CTRL-2"] = .close_this_pane
@@ -185,6 +186,7 @@ _settings_setup_basic_bragi_keybindings :: proc() {
     commands_map["CTRL-SHIFT-RIGHT"] = .select_next_word
 
     commands_map["BACKSPACE"]        = .remove_left
+    commands_map["SHIFT-BACKSPACE"]  = .remove_left
     commands_map["DELETE"]           = .remove_right
     commands_map["CTRL-D"]           = .remove_right
     commands_map["CTRL-BACKSPACE"]   = .remove_prev_word
@@ -193,6 +195,7 @@ _settings_setup_basic_bragi_keybindings :: proc() {
 
     commands_map["TAB"]              = .indent_or_tab_stop
     commands_map["ENTER"]            = .newline_and_indent
+    commands_map["SHIFT-ENTER"]      = .newline_and_indent
 
     commands_map["CTRL-X"]           = .cut_selection
     commands_map["CTRL-SHIFT-X"]     = .cut_line
@@ -203,6 +206,59 @@ _settings_setup_basic_bragi_keybindings :: proc() {
 
     commands_map["CTRL-Z"]           = .undo
     commands_map["CTRL-SHIFT-Z"]     = .redo
+
+    use_nawe_keybindings()
+}
+
+@(private="file")
+use_nawe_keybindings :: proc() {
+    commands_map["CTRL-G"]         = .quit_mode
+    commands_map["CTRL-X"]         = .modifier
+
+    commands_map["CTRL-SPACE"]     = .toggle_selection_mode
+
+    commands_map["CTRL-X-B"]       = .find_buffer
+    commands_map["ALT-X"]          = .find_command
+    commands_map["CTRL-X-CTRL-F"]  = .find_file
+
+    commands_map["CTRL-X-K"]       = .close_current_buffer
+    commands_map["CTRL-X-CTRL-S"]  = .save_buffer
+    commands_map["CTRL-X-CTRL-W"]  = .save_buffer_as
+
+    commands_map["ALT-P"]          = .clone_cursor_above
+    commands_map["ALT-N"]          = .clone_cursor_below
+    commands_map["CTRL-L"]         = .recenter_cursor
+    commands_map["CTRL-SHIFT-TAB"] = .prev_cursor
+    commands_map["CTRL-TAB"]       = .next_cursor
+    commands_map["CTRL-SHIFT-A"]   = .all_cursors
+
+    commands_map["ALT-<"]          = .move_start
+    commands_map["ALT->"]          = .move_end
+    commands_map["CTRL-A"]         = .move_beginning_of_line
+    commands_map["CTRL-E"]         = .move_end_of_line
+    commands_map["CTRL-P"]         = .move_up
+    commands_map["CTRL-N"]         = .move_down
+    commands_map["CTRL-B"]         = .move_left
+    commands_map["CTRL-F"]         = .move_right
+    commands_map["ALT-B"]          = .move_prev_word
+    commands_map["ALT-F"]          = .move_next_word
+    commands_map["ALT-V"]          = .move_prev_page
+    commands_map["CTRL-V"]         = .move_next_page
+
+    commands_map["CTRL-X-CTRL-1"]  = .close_other_panes
+    commands_map["CTRL-X-CTRL-0"]  = .close_this_pane
+    commands_map["CTRL-X-CTRL-3"]  = .new_pane_to_the_right
+    commands_map["CTRL-X-CTRL-O"]  = .other_pane
+    commands_map["ALT-O"]          = .other_pane
+
+    commands_map["CTRL-W"]         = .cut_selection
+    commands_map["ALT-W"]          = .copy_selection
+    commands_map["CTRL-Y"]         = .paste
+
+    commands_map["CTRL-/"]         = .undo
+    commands_map["CTRL-?"]         = .redo
+
+    commands_map["CTRL-K"]         = .cut_line
 }
 
 hex_to_color :: proc(hex: int) -> (result: Color) {

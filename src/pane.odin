@@ -654,7 +654,8 @@ translate_position :: proc(pane: ^Pane, pos: int, t: Translation, max_column := 
     }
 
     is_word_delim :: proc(b: byte) -> bool {
-        return is_space(b) || b == '_'
+        return is_space(b) || b == '_' || b == '-' || b == '{' || b == '}' ||
+            b == '(' || b == ')' || b == '.'
     }
 
     buf := pane.buffer.text

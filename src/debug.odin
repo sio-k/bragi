@@ -592,13 +592,15 @@ when BRAGI_DEBUG {
     }
 } else {
     @(private)
-    DEBUG_init :: proc() {}
+    DEBUG_init         :: proc() {}
     @(private)
-    DEBUG_destroy :: proc() {}
+    DEBUG_destroy      :: proc() {}
     @(private)
     DEBUG_handle_input :: proc(event: Event) -> bool { return false }
     @(private)
-    DEBUG_update_draw :: proc() {}
+    DEBUG_update       :: proc() {}
+    @(private)
+    DEBUG_draw         :: proc() {}
 }
 
 @(private)
