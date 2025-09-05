@@ -112,22 +112,22 @@ initialize_font_related_stuff :: proc() {
     prepare_text(fonts_map[.UI_Small],   "0123456789") // tipically used for numbers
 }
 
-font_to_scaled_pixels :: proc(pt: f32, size_diff: f32 = 0, scale: f32 = 1.0) -> i32 {
-    result := i32(math.ceil(((f32(pt) + size_diff) * dpi_scale) * scale))
+font_to_scaled_pixels :: proc(pt: f32, size_diff: f32 = 0, scale: f32 = 1.0) -> f32 {
+    result := math.ceil(((pt + size_diff) * dpi_scale) * scale)
     return clamp(result, MINIMUM_FONT_SIZE, MAXIMUM_FONT_SIZE)
 }
 
-get_font_with_size :: proc(name: string, data: []byte, character_height: i32) -> ^Font {
+get_font_with_size :: proc(name: string, data: []byte, character_height: f32) -> ^Font {
     ensure_fonts_are_initialized()
 
     for font in fonts_cache {
-        if font.character_height != character_height do continue
+        if font.character_height != i32(character_height) do continue
         if font.name != name do continue
         return font
     }
 
     font_data := sdl.IOFromMem(raw_data(data), len(data))
-    face := ttf.OpenFontIO(font_data, true, f32(character_height))
+    face := ttf.OpenFontIO(font_data, true, character_height)
 
     ttf.SetFontHinting(face, .LIGHT_SUBPIXEL)
 
@@ -152,7 +152,7 @@ get_font_with_size :: proc(name: string, data: []byte, character_height: i32) ->
         result.character_height = result.max_ascender - result.max_descender
     }
 
-    result.texture = texture_create(.STREAMING, character_height*10, character_height*10)
+    result.texture = texture_create(.STREAMING, i32(character_height*10), i32(character_height*10))
 
     minx, maxx, xadvance: i32
     _ = ttf.GetGlyphMetrics(result.face, u32('M'), &minx, &maxx, nil, nil, &xadvance)

@@ -168,6 +168,14 @@ buffer_index :: proc(buffer: ^Buffer) -> int {
     unreachable()
 }
 
+buffer_is_readonly :: proc(buffer: ^Buffer) -> bool {
+    return .Read_Only in buffer.flags
+}
+
+show_buffer_readonly_message :: proc(buffer: ^Buffer) {
+    log.debugf("buffer '{}' is read only", buffer.name)
+}
+
 @(private="file")
 _buffer_set_major_mode :: proc(buffer: ^Buffer) {
     if buffer.filepath != "" {

@@ -31,8 +31,6 @@ Command :: enum u32 {
     next_cursor,
     all_cursors,
 
-    move_start,
-    move_end,
     move_up,
     move_down,
     move_left,
@@ -43,12 +41,12 @@ Command :: enum u32 {
     move_next_paragraph,
     move_prev_page,
     move_next_page,
+    move_beginning_of_buffer,
+    move_end_of_buffer,
     move_beginning_of_line,
     move_end_of_line,
 
     select_all,
-    select_start,
-    select_end,
     select_up,
     select_down,
     select_left,
@@ -59,6 +57,8 @@ Command :: enum u32 {
     select_next_paragraph,
     select_prev_page,
     select_next_page,
+    select_beginning_of_buffer,
+    select_end_of_buffer,
     select_beginning_of_line,
     select_end_of_line,
 

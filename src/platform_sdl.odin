@@ -22,7 +22,7 @@ _ :: filepath
 
 platform_init :: proc() {
     profiling_start("init SDL")
-    WINDOW_FLAGS  :: sdl.WindowFlags{.RESIZABLE, .HIGH_PIXEL_DENSITY}
+    WINDOW_FLAGS  :: sdl.WindowFlags{.RESIZABLE, .HIGH_PIXEL_DENSITY, .OPENGL}
 
     METADATA :: []struct{key, value: cstring}{
         {key = sdl.PROP_APP_METADATA_NAME_STRING,       value = NAME},
@@ -46,6 +46,8 @@ platform_init :: proc() {
     }
 
     log.debug("initializing SDL")
+
+    sdl.SetHint(sdl.HINT_VIDEO_ALLOW_SCREENSAVER, "1")
 
     if !sdl.Init({.VIDEO}) {
         log.fatal("failed to init SDL", sdl.GetError())

@@ -399,16 +399,16 @@ widget_keyboard_event_handler :: proc(event: Event_Keyboard, cmd: Command) -> (h
             cursor.sel = len(prompt)
             return true
         }
-        case .move_start, .move_beginning_of_line, .select_start, .select_beginning_of_line: {
+        case .move_beginning_of_buffer, .move_beginning_of_line, .select_beginning_of_buffer, .select_beginning_of_line: {
             cursor.pos = 0
-            if cmd != .select_start && cmd != .select_beginning_of_line && !global_widget.cursor_selecting {
+            if cmd != .select_beginning_of_buffer && cmd != .select_beginning_of_line && !global_widget.cursor_selecting {
                 cursor.sel = 0
             }
             return true
         }
-        case .move_end, .move_end_of_line, .select_end, .select_end_of_line: {
+        case .move_end_of_buffer, .move_end_of_line, .select_end_of_buffer, .select_end_of_line: {
             cursor.pos = len(prompt)
-            if cmd != .select_end && cmd != .select_end_of_line && !global_widget.cursor_selecting {
+            if cmd != .select_end_of_buffer && cmd != .select_end_of_line && !global_widget.cursor_selecting {
                 cursor.sel = len(prompt)
             }
             return true
@@ -794,7 +794,7 @@ _search_in_buffer_widget_update :: proc() {
             pane_cursor := get_first_active_cursor(active_pane)
             pane_cursor.pos = offset + len(global_widget.prompt.buf)
             pane_cursor.sel = offset
-            maybe_recenter_cursor(active_pane, true)
+            pane_maybe_recenter_cursor(active_pane, true)
         }
     }
 

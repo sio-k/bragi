@@ -158,8 +158,8 @@ _settings_setup_basic_bragi_keybindings :: proc() {
     commands_map["CTRL-TAB"]         = .next_cursor
     commands_map["CTRL-SHIFT-A"]     = .all_cursors
 
-    commands_map["CTRL-SHIFT-Q"]     = .move_start
-    commands_map["CTRL-SHIFT-E"]     = .move_end
+    commands_map["CTRL-SHIFT-Q"]     = .move_beginning_of_buffer
+    commands_map["CTRL-SHIFT-E"]     = .move_end_of_buffer
     commands_map["CTRL-Q"]           = .move_beginning_of_line
     commands_map["CTRL-E"]           = .move_end_of_line
     commands_map["UP"]               = .move_up
@@ -232,8 +232,8 @@ use_nawe_keybindings :: proc() {
     commands_map["CTRL-TAB"]       = .next_cursor
     commands_map["CTRL-SHIFT-A"]   = .all_cursors
 
-    commands_map["ALT-<"]          = .move_start
-    commands_map["ALT->"]          = .move_end
+    commands_map["ALT-<"]          = .move_beginning_of_buffer
+    commands_map["ALT->"]          = .move_end_of_buffer
     commands_map["CTRL-A"]         = .move_beginning_of_line
     commands_map["CTRL-E"]         = .move_end_of_line
     commands_map["CTRL-P"]         = .move_up

@@ -180,7 +180,7 @@ main :: proc() {
                     if global_widget.active {
                         handled = widget_keyboard_event_handler(v, cmd)
                     } else {
-                        handled = edit_mode_keyboard_event_handler(v, cmd)
+                        handled = pane_keyboard_event_handler(v, cmd)
                     }
                 }
 
