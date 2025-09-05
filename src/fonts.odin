@@ -41,10 +41,9 @@ Font :: struct {
 // NOTE(nawe) maximum number of glyphs we can cache. This should be
 // sufficient for when working with code and editing text, but it
 // might need to grow according to experience in using the editor.
-MAXIMUM_FONT_SIZE :: 144
+MAXIMUM_FONT_SIZE :: 110
 MINIMUM_FONT_SIZE :: 14
 MAX_SAFE_GLYPHS   :: 300
-BASE_TEXTURE_SIZE :: 1024
 
 CHAR_PADDING :: 1
 
@@ -141,7 +140,7 @@ get_font_with_size :: proc(name: string, data: []byte, character_height: i32) ->
     result.face = face
     result.replacement_character = 0xFFFD
 
-    result.character_height      = ttf.GetFontHeight(result.face)
+    result.character_height = ttf.GetFontHeight(result.face)
     result.max_ascender     = ttf.GetFontAscent(result.face)
     result.max_descender    = -ttf.GetFontDescent(result.face)
 
@@ -153,7 +152,7 @@ get_font_with_size :: proc(name: string, data: []byte, character_height: i32) ->
         result.character_height = result.max_ascender - result.max_descender
     }
 
-    result.texture = texture_create(.STREAMING, BASE_TEXTURE_SIZE, BASE_TEXTURE_SIZE)
+    result.texture = texture_create(.STREAMING, character_height*10, character_height*10)
 
     minx, maxx, xadvance: i32
     _ = ttf.GetGlyphMetrics(result.face, u32('M'), &minx, &maxx, nil, nil, &xadvance)

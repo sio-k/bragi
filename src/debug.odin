@@ -529,10 +529,13 @@ when BRAGI_DEBUG {
         alloc_amount_str := fmt.tprintf("Amount: {}mb\n", (alloc_amount/1024.)/1024.)
         alloc_count := tracking_allocator.total_allocation_count
         alloc_count_str := fmt.tprintf("Count:  {}\n", alloc_count)
+        alloc_current := tracking_allocator.current_memory_allocated
+        alloc_current_str := fmt.tprintf("Current:  {}\n", (alloc_current/1024.)/1024.)
 
         set_custom_color(DEBUG_COLOR_FOREGROUND, _font_regular.texture)
         debug.tab_pen = draw_text(_font_regular, debug.tab_pen, alloc_amount_str)
         debug.tab_pen = draw_text(_font_regular, debug.tab_pen, alloc_count_str)
+        debug.tab_pen = draw_text(_font_regular, debug.tab_pen, alloc_current_str)
 
         for _, value in tracking_allocator.allocation_map {
             alloc_detail_str := fmt.tprintf("{}: {}\n", value.location.procedure, value.size)

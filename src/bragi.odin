@@ -78,8 +78,6 @@ tracking_allocator: mem.Tracking_Allocator
 main :: proc() {
     initialization_time := time.now()
     when BRAGI_DEBUG {
-        context.logger = log.create_console_logger()
-
         default_allocator := context.allocator
         mem.tracking_allocator_init(&tracking_allocator, default_allocator)
         context.allocator = mem.tracking_allocator(&tracking_allocator)
@@ -95,6 +93,8 @@ main :: proc() {
             mem.tracking_allocator_clear(a)
             return err
         }
+
+        context.logger = log.create_console_logger()
     }
 
     context.random_generator = crypto.random_generator()
@@ -166,14 +166,13 @@ main :: proc() {
                     cmd, key_combo = map_keystroke_to_command(v.key_code, v.modifiers)
 
                     #partial switch cmd {
-                        case .modifier: {
-                            append(&modifiers_queue, fmt.aprintf("{}-", key_combo))
-                            handled = true
-                        }
-                        case .quit_mode: {
-                            quit_mode_command()
-                            handled = true
-                        }
+                    case .modifier:
+                        append(&modifiers_queue, fmt.aprintf("{}-", key_combo))
+                        handled = true
+
+                    case .quit_mode:
+                        quit_mode_command()
+                        handled = true
                     }
                 }
 
@@ -297,8 +296,8 @@ main :: proc() {
 
 
     when BRAGI_DEBUG {
+        log.destroy_console_logger(context.logger)
         reset_tracking_allocator(&tracking_allocator)
         mem.tracking_allocator_destroy(&tracking_allocator)
-        log.destroy_console_logger(context.logger)
     }
 }
