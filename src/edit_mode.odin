@@ -251,14 +251,14 @@ edit_mode_keyboard_event_handler :: proc(event: Event_Keyboard, cmd: Command) ->
         }
 
         return true
-
     case .save_buffer_as:
         widget_open_save_file_as()
         return true
 
-    case .search_backward:
+    case .search_backward: fallthrough
     case .search_forward:
         widget_open_search_in_buffer()
+        return true
 
     case .close_this_pane:
         if len(open_panes) == 1 do return true
@@ -295,6 +295,7 @@ edit_mode_keyboard_event_handler :: proc(event: Event_Keyboard, cmd: Command) ->
         }
 
         update_all_pane_textures()
+        flag_buffer(pane.buffer, {.Dirty})
         return true
     case .new_pane_to_the_right:
         result := pane_create(pane)

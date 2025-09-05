@@ -103,6 +103,7 @@ when BRAGI_DEBUG {
         ft_lowest:       f64,
 
         // memory tab
+        memory_scroll:   i32,
     }
 
     @(private)
@@ -115,7 +116,7 @@ when BRAGI_DEBUG {
         _font_bold    = fonts_map[.UI_Bold]
         _font_icons   = fonts_map[.Icons]
 
-        _line_height  = _font_bold.line_height
+        _line_height  = _font_bold.character_height
         _title_height = _line_height + TITLE_PADDING
         _heading_section_height = _title_height * 3
 
@@ -194,6 +195,8 @@ when BRAGI_DEBUG {
                         debug.profiler_scroll = clamp(debug.profiler_scroll, 0, 500)
                     case .Buffer:
                     case .Memory:
+                        debug.memory_scroll += i32(v.scroll_y * SCROLL_OFFSET)
+                        debug.memory_scroll = max(0, debug.memory_scroll)
                     case .Logs:
                     }
 
@@ -332,14 +335,14 @@ when BRAGI_DEBUG {
         }
 
         { // tabs
-            pen_for_tabs := Vector2{1, _font_bold.line_height + 7}
+            pen_for_tabs := Vector2{1, _font_bold.character_height + 7}
 
             for tab, index in Debug_Tab {
                 tab_name := fmt.tprintf("   {}   ", reflect.enum_string(tab))
                 x := pen_for_tabs.x
                 y := pen_for_tabs.y
                 w := prepare_text(_font_bold, tab_name)
-                h := _font_bold.line_height
+                h := _font_bold.character_height
                 if debug.current_tab == tab {
                     set_custom_color(DEBUG_COLOR_BUTTON_ACTIVE_BG)
                     set_custom_color(DEBUG_COLOR_BUTTON_ACTIVE_FG, _font_bold.texture)
@@ -369,7 +372,7 @@ when BRAGI_DEBUG {
             current_frame_str := fmt.tprintf("Frame #{}\n", debug.current_frame)
             set_custom_color(DEBUG_COLOR_FOREGROUND, _font_bold.texture)
             draw_text(_font_bold, pen_for_frame_info, current_frame_str)
-            pen_for_frame_info.y += _font_bold.line_height
+            pen_for_frame_info.y += _font_bold.character_height
 
             pen_for_toggle := Vector2{i32(DEBUG_right_edge()), pen_for_frame_info.y}
             DEBUG_draw_toggle_switch(pen_for_toggle, .Slow_Frames, "slow frames")
@@ -388,6 +391,8 @@ when BRAGI_DEBUG {
             DEBUG_draw_profiler_tab()
         case .Buffer:
         case .Memory:
+            debug.tab_pen.y -= debug.memory_scroll
+            DEBUG_draw_memory_tab()
         case .Logs:
 
         }
@@ -449,7 +454,7 @@ when BRAGI_DEBUG {
             max_fps_str := fmt.tprintf("Max FPS: %.2f", debug.fps_max)
             max_text_pen := max_line_pen
             max_text_pen.x = fps_line_width - _font_small.em_width * i32(len(max_fps_str))
-            max_text_pen.y -= _font_small.line_height
+            max_text_pen.y -= _font_small.character_height
             draw_text(_font_small, max_text_pen, max_fps_str)
             draw_rect(max_line_pen.x, max_line_pen.y, fps_line_width, FPS_LINE_HEIGHT)
 
@@ -458,14 +463,14 @@ when BRAGI_DEBUG {
             min_fps_str := fmt.tprintf("Min FPS: %.2f    ", debug.fps_min)
             min_text_pen := min_line_pen
             min_text_pen.x = max_text_pen.x - _font_small.em_width * i32(len(min_fps_str))
-            min_text_pen.y -= _font_small.line_height
+            min_text_pen.y -= _font_small.character_height
             draw_text(_font_small, min_text_pen, min_fps_str)
             draw_rect(min_line_pen.x, min_line_pen.y, fps_line_width, FPS_LINE_HEIGHT)
 
             set_custom_color(DEBUG_COLOR_FOREGROUND)
             set_custom_color(DEBUG_COLOR_FOREGROUND, _font_regular.texture)
             avg_text_pen := avg_line_pen
-            avg_text_pen.y -= _font_regular.line_height
+            avg_text_pen.y -= _font_regular.character_height
             avg_fps_str := fmt.tprintf("Average FPS: %.2f", debug.fps_avg)
             draw_text(_font_regular, avg_text_pen, avg_fps_str)
             draw_rect(avg_line_pen.x, avg_line_pen.y, fps_line_width, FPS_LINE_HEIGHT)
@@ -516,6 +521,22 @@ when BRAGI_DEBUG {
                 i32(DEBUG_WINDOW_SIZE * low_proportion), LINE_CHART_HEIGHT,
             )
             draw_text(_font_regular, low_frametime_pen, low_frametime_str)
+        }
+    }
+
+    DEBUG_draw_memory_tab :: proc() {
+        alloc_amount := tracking_allocator.total_memory_allocated
+        alloc_amount_str := fmt.tprintf("Amount: {}mb\n", (alloc_amount/1024.)/1024.)
+        alloc_count := tracking_allocator.total_allocation_count
+        alloc_count_str := fmt.tprintf("Count:  {}\n", alloc_count)
+
+        set_custom_color(DEBUG_COLOR_FOREGROUND, _font_regular.texture)
+        debug.tab_pen = draw_text(_font_regular, debug.tab_pen, alloc_amount_str)
+        debug.tab_pen = draw_text(_font_regular, debug.tab_pen, alloc_count_str)
+
+        for _, value in tracking_allocator.allocation_map {
+            alloc_detail_str := fmt.tprintf("{}: {}\n", value.location.procedure, value.size)
+            debug.tab_pen = draw_text(_font_regular, debug.tab_pen, alloc_detail_str)
         }
     }
 

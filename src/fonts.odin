@@ -20,8 +20,6 @@ Font_Face :: enum {
 Glyph_Data :: struct {
     x, y:     i32,
     w, h:     i32,
-    xoffset:  i32,
-    yoffset:  i32,
     xadvance: i32,
 }
 
@@ -34,14 +32,9 @@ Font :: struct {
 
     em_width:                i32,
     character_height:        i32,
-    line_spacing:            i32,
-    line_height:             i32,
     max_ascender:            i32,
-    typical_ascender:        i32,
     max_descender:           i32,
-    typical_descender:       i32,
     xadvance:                i32,
-    y_offset_for_centering:  f32,
     replacement_character:   rune,
 }
 
@@ -51,7 +44,7 @@ Font :: struct {
 MAXIMUM_FONT_SIZE :: 144
 MINIMUM_FONT_SIZE :: 14
 MAX_SAFE_GLYPHS   :: 300
-BASE_TEXTURE_SIZE :: MAX_SAFE_GLYPHS * 2
+BASE_TEXTURE_SIZE :: 1024
 
 CHAR_PADDING :: 1
 
@@ -139,7 +132,7 @@ get_font_with_size :: proc(name: string, data: []byte, character_height: i32) ->
 
     ttf.SetFontHinting(face, .LIGHT_SUBPIXEL)
 
-    result := new(Font, bragi_allocator)
+    result := new(Font)
     // TODO(nawe) maybe I don't need to clone this but I would guess,
     // if I ever allow to change it, I might just temporary load this
     // from a config and would need to clone it. It should be a small
@@ -148,7 +141,7 @@ get_font_with_size :: proc(name: string, data: []byte, character_height: i32) ->
     result.face = face
     result.replacement_character = 0xFFFD
 
-    result.character_height = ttf.GetFontHeight(result.face)
+    result.character_height      = ttf.GetFontHeight(result.face)
     result.max_ascender     = ttf.GetFontAscent(result.face)
     result.max_descender    = -ttf.GetFontDescent(result.face)
 
@@ -160,7 +153,6 @@ get_font_with_size :: proc(name: string, data: []byte, character_height: i32) ->
         result.character_height = result.max_ascender - result.max_descender
     }
 
-    result.line_height = result.character_height
     result.texture = texture_create(.STREAMING, BASE_TEXTURE_SIZE, BASE_TEXTURE_SIZE)
 
     minx, maxx, xadvance: i32
@@ -205,7 +197,7 @@ find_or_create_glyph :: proc(font: ^Font, r: rune) -> ^Glyph_Data {
         x += width
     }
 
-    result := new(Glyph_Data, bragi_allocator)
+    result := new(Glyph_Data)
 
     surface := sdl.CreateSurface(font.texture.w, font.texture.h, .RGBA32)
     sdl.SetSurfaceColorKey(surface, true, sdl.MapSurfaceRGBA(surface, 0, 0, 0, 0))

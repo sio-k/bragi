@@ -6,6 +6,7 @@ import "core:strings"
 Major_Mode :: enum u8 {
     Bragi = 0,
     Jai,
+    JavaScript,
     Odin,
 }
 
@@ -33,6 +34,14 @@ major_modes_init :: proc() {
         file_extensions = ".jai",
         visual_tokenization_proc = tokenize_jai,
         indent_tokenization_proc = tokenize_jai_indentation,
+    }
+
+    major_mode_settings[.JavaScript] = {
+        visual_name = "JavaScript",
+        electric_indent = true,
+        file_extensions = ".js|.ts|.jsx|.tsx",
+        visual_tokenization_proc = tokenize_js,
+        indent_tokenization_proc = tokenize_js_indentation,
     }
 
     major_mode_settings[.Odin] = {

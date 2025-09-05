@@ -573,7 +573,7 @@ get_pane_visible_columns :: proc(pane: ^Pane) -> (result: int) {
 get_pane_visible_rows :: proc(pane: ^Pane) -> (result: int) {
     profiling_start("get_pane_visible_rows")
     pane_height := pane.rect.h
-    font_height := f32(pane.font.line_height)
+    font_height := f32(pane.font.character_height)
     modeline_height := f32(get_modeline_height())
     result = int((pane_height - modeline_height)/font_height)
     return result
@@ -583,7 +583,7 @@ get_pane_visible_rows :: proc(pane: ^Pane) -> (result: int) {
 get_modeline_height :: #force_inline proc() -> i32 {
     MODELINE_PADDING :: 8
     font := fonts_map[.UI_Regular]
-    return font.line_height + MODELINE_PADDING
+    return font.character_height + MODELINE_PADDING
 }
 
 switch_to_buffer :: proc(pane: ^Pane, buffer: ^Buffer) {

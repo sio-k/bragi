@@ -77,7 +77,7 @@ widget_init :: proc() {
 update_widget_texture :: proc() {
     assert(global_widget.font != nil)
     texture_destroy(global_widget.texture)
-    widget_height := global_widget.font.line_height * WIDGET_HEIGHT_IN_ROWS
+    widget_height := global_widget.font.character_height * WIDGET_HEIGHT_IN_ROWS
     global_widget.rect = make_rect(0, window_height - widget_height, window_width, widget_height)
     global_widget.texture = texture_create(.TARGET, i32(global_widget.rect.w), i32(global_widget.rect.h))
 }
@@ -951,7 +951,7 @@ update_and_draw_widget :: proc() {
 
     font_regular := global_widget.font
     font_bold := fonts_map[.UI_Bold]
-    line_height := font_regular.line_height
+    line_height := font_regular.character_height
     left_padding := font_regular.xadvance
     results_pen := Vector2{left_padding, line_height}
 

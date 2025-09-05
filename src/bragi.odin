@@ -77,7 +77,9 @@ tracking_allocator: mem.Tracking_Allocator
 
 main :: proc() {
     initialization_time := time.now()
-    when ODIN_DEBUG {
+    when BRAGI_DEBUG {
+        context.logger = log.create_console_logger()
+
         default_allocator := context.allocator
         mem.tracking_allocator_init(&tracking_allocator, default_allocator)
         context.allocator = mem.tracking_allocator(&tracking_allocator)
@@ -95,7 +97,6 @@ main :: proc() {
         }
     }
 
-    context.logger = log.create_console_logger()
     context.random_generator = crypto.random_generator()
 
     bragi_allocator = context.allocator
@@ -294,10 +295,10 @@ main :: proc() {
     DEBUG_destroy()
     platform_destroy()
 
-    log.destroy_console_logger(context.logger)
 
-    when ODIN_DEBUG {
+    when BRAGI_DEBUG {
         reset_tracking_allocator(&tracking_allocator)
         mem.tracking_allocator_destroy(&tracking_allocator)
+        log.destroy_console_logger(context.logger)
     }
 }

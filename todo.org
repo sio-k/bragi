@@ -10,6 +10,8 @@ Improvement/Buffer: make the buffer piece table to actually store the line start
 
 Improvements/Search: make search interactive. For example, allow a command to create a cursor on each search result.
 
+Improvements/Memory: we're taking a huge snapshot of undos/redos. This is leaving a huge memory footprint. Need to improve this.
+
 Maybe Bug/Cursor: when converting the cursor offset to coords and back, I'm using the passed line information. This might not be a good idea, since the only time we care about coords might be when we do something in the view, and then it should always use the pane lines (that could be the wrapped lines or regular buffer lines) but not an arbitrary line information.
 
 [Unimporant] Code Style/-disallow-do: analyze if it's a good idea to get rid of the inline if statement with do. It's a good feature for me but at this point I have too many things happening in single lines sometimes and might just be better to have code style a little bit different
@@ -23,6 +25,12 @@ Improvement/Use Commands Instead Of Keys: some places are still using just keys,
 Feature/Mouse: add mouse support to pane/edit
 
 Feature/Marks: save pane/buffer marks for some user actions. Show the existing marks on the pane fringe
+
+* Feature/Desktop mode: save the opened buffers to a history file so they can be reopened on restart.
+
+Feature/Project mode: navigate through project files on find-file or find-buffer easily.
+
+Feature/Search and Replace!
 
   ----------------
  /   NICETIES   /

@@ -115,7 +115,7 @@ get_font_with_size :: proc(name: string, data: []byte, character_height: i32) ->
         return nil
     }
 
-    result := new(Font, bragi_allocator)
+    result := new(Font)
     // TODO(nawe) maybe I don't need to clone this but I would guess,
     // if I ever allow to change it, I might just temporary load this
     // from a config and would need to clone it. It should be a small

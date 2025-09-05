@@ -40,7 +40,7 @@ platform_init :: proc() {
         }
     }
 
-    when ODIN_DEBUG {
+    when BRAGI_DEBUG {
         sdl.SetLogPriorities(.ERROR)
         sdl.SetLogOutputFunction(_platform_sdl_debug_log, nil)
     }

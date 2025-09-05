@@ -11,6 +11,11 @@ Jai_Tokenizer :: struct {
 
 Token :: struct {
     using token: Basic_Token,
+
+    variant: union {
+        Operation,
+        Punctuation,
+    },
 }
 
 @(private)
@@ -85,22 +90,22 @@ get_next_token :: proc(t: ^Jai_Tokenizer) -> (token: Token) {
         parse_number(t, &token)
     } else {
         switch t.buf[t.offset] {
-        case '*':  tokenizer_parse_asterisk(t, &token)
-        case '=':  tokenizer_parse_equal   (t, &token)
-        case '>':  tokenizer_parse_greater (t, &token)
-        case '<':  tokenizer_parse_less    (t, &token)
-        case '-':  tokenizer_parse_minus   (t, &token)
-        case '|':  tokenizer_parse_pipe    (t, &token)
-        case '+':  tokenizer_parse_plus    (t, &token)
-        case '/':  tokenizer_parse_slash   (t, &token)
-        case '\t': tokenizer_parse_tab     (t, &token)
-        case '~':  tokenizer_parse_tilde   (t, &token)
-
-        case ':':  parse_colon             (t, &token)
-        case '#':  parse_directive         (t, &token)
-        case '.':  parse_dot               (t, &token)
-        case '@':  parse_note              (t, &token)
-        case '"':  parse_string_literal    (t, &token)
+        case '*':  parse_asterisk       (t, &token)
+        case '!':  parse_bang           (t, &token)
+        case ':':  parse_colon          (t, &token)
+        case '#':  parse_directive      (t, &token)
+        case '.':  parse_dot            (t, &token)
+        case '=':  parse_equal          (t, &token)
+        case '>':  parse_greater        (t, &token)
+        case '<':  parse_less           (t, &token)
+        case '-':  parse_minus          (t, &token)
+        case '@':  parse_note           (t, &token)
+        case '|':  parse_pipe           (t, &token)
+        case '+':  parse_plus           (t, &token)
+        case '/':  parse_slash          (t, &token)
+        case '"':  parse_string_literal (t, &token)
+        case '\t': parse_tab            (t, &token)
+        case '~':  parse_tilde          (t, &token)
 
         case ';':  token.kind = .Punctuation; token.variant = .Semicolon;     t.offset += 1
         case ',':  token.kind = .Punctuation; token.variant = .Comma;         t.offset += 1
@@ -112,7 +117,6 @@ get_next_token :: proc(t: ^Jai_Tokenizer) -> (token: Token) {
         case ')':  token.kind = .Punctuation; token.variant = .Paren_Right;   t.offset += 1
         case '$':  token.kind = .Punctuation; token.variant = .Dollar_Sign;   t.offset += 1
         case '?':  token.kind = .Operation;   token.variant = .Question;      t.offset += 1
-        case '!':  token.kind = .Operation;   token.variant = .Bang;          t.offset += 1
         case '&':  token.kind = .Operation;   token.variant = .Ampersand;     t.offset += 1
         case '%':  token.kind = .Operation;   token.variant = .Percent;       t.offset += 1
         case '^':  token.kind = .Operation;   token.variant = .Caret;         t.offset += 1
@@ -123,6 +127,30 @@ get_next_token :: proc(t: ^Jai_Tokenizer) -> (token: Token) {
 
     token.length = t.offset - token.start
     return
+}
+
+parse_asterisk :: proc(t: ^Tokenizer, token: ^Token) {
+    token.kind = .Operation
+    token.variant = .Asterisk
+    t.offset += 1
+    if is_eof(t) do return
+
+    if is_char(t, '=') {
+        token.variant = .Asterisk_Equal
+        t.offset += 1
+    }
+}
+
+parse_bang :: proc(t: ^Tokenizer, token: ^Token) {
+    token.kind = .Operation
+    token.variant = .Bang
+    t.offset += 1
+    if is_eof(t) do return
+
+    if is_char(t, '=') {
+        token.variant = .Bang_Equal
+        t.offset += 1
+    }
 }
 
 parse_colon :: proc(t: ^Jai_Tokenizer, token: ^Token) {
@@ -168,6 +196,39 @@ parse_dot :: proc(t: ^Jai_Tokenizer, token: ^Token) {
     }
 }
 
+parse_equal :: proc(t: ^Tokenizer, token: ^Token) {
+    token.kind = .Operation
+    token.variant = .Equal
+    t.offset += 1
+    if is_eof(t) do return
+
+    if is_char(t, '=') {
+        token.variant = .Equal_Equal
+        t.offset += 1
+    }
+}
+
+parse_greater :: proc(t: ^Tokenizer, token: ^Token) {
+    token.kind = .Operation
+    token.variant = .Greater
+    t.offset += 1
+    if is_eof(t) do return
+
+    switch {
+    case is_char(t, '='):
+        token.variant = .Greater_Equal
+        t.offset += 1
+    case is_char(t, '>'):
+        token.variant = .Greater_Greater
+        t.offset += 1
+
+        if is_char(t, '=') {
+            token.variant = .Greater_Greater_Equal
+            t.offset += 1
+        }
+    }
+}
+
 parse_identifier :: proc(t: ^Jai_Tokenizer, token: ^Token) {
     token.kind = .Identifier
     token.text = read_jai_word(t)
@@ -187,6 +248,42 @@ parse_identifier :: proc(t: ^Jai_Tokenizer, token: ^Token) {
     case slice.contains(CONSTANTS, token.text): token.kind = .Constant
     case slice.contains(TYPES,     token.text): token.kind = .Type
     case slice.contains(KEYWORDS,  token.text): token.kind = .Keyword
+    }
+}
+
+parse_less :: proc(t: ^Tokenizer, token: ^Token) {
+    token.kind = .Operation
+    token.variant = .Less
+    t.offset += 1
+    if is_eof(t) do return
+
+    switch {
+    case is_char(t, '='):
+        token.variant = .Less_Equal
+        t.offset += 1
+    case is_char(t, '<'):
+        token.variant = .Less_Less
+        t.offset += 1
+        if is_char(t, '=') {
+            token.variant = .Less_Less_Equal
+            t.offset += 1
+        }
+    }
+}
+
+parse_minus :: proc(t: ^Tokenizer, token: ^Token) {
+    token.kind = .Operation
+    token.variant = .Minus
+    t.offset += 1
+    if is_eof(t) do return
+
+    switch {
+    case is_char(t, '='):
+        token.variant = .Minus_Equal
+        t.offset += 1
+    case is_char(t, '>'):
+        token.variant = .Minus_Greater
+        t.offset += 1
     }
 }
 
@@ -244,6 +341,82 @@ parse_note :: proc(t: ^Jai_Tokenizer, token: ^Token) {
     for !is_eof(t) && is_alphanumeric(t) do t.offset += 1
 }
 
+parse_pipe :: proc(t: ^Tokenizer, token: ^Token) {
+    token.kind = .Operation
+    token.variant = .Pipe
+    t.offset += 1
+    if is_eof(t) do return
+
+    switch {
+    case is_char(t, '='):
+        token.variant = .Pipe_Equal
+        t.offset += 1
+    case is_char(t, '|'):
+        token.variant = .Pipe_Pipe
+        t.offset += 1
+
+        if is_char(t, '=') {
+            token.variant = .Pipe_Pipe_Equal
+            t.offset += 1
+        }
+    }
+}
+
+parse_plus :: proc(t: ^Tokenizer, token: ^Token) {
+    token.kind = .Operation
+    token.variant = .Plus
+    t.offset += 1
+    if is_eof(t) do return
+
+    if is_char(t, '=') {
+        token.variant = .Plus_Equal
+        t.offset += 1
+    }
+}
+
+parse_slash :: proc(t: ^Tokenizer, token: ^Token) {
+    token.kind = .Operation
+    token.variant = .Slash
+    t.offset += 1
+    if is_eof(t) do return
+
+    switch {
+    case is_char(t, '='):
+        token.variant = .Slash_Equal
+        t.offset += 1
+    case is_char(t, '/'):
+        token.kind = .Comment
+        token.variant = nil
+        t.offset += 1
+        for !is_eof(t) && !is_char(t, '\n') do t.offset += 1
+    case is_char(t, '*'):
+        token.kind = .Comment_Multiline
+        token.variant = nil
+        t.offset += 1
+        comments_block_count := 0
+
+        for !is_eof(t) {
+            if is_char(t, '*') {
+                if b, ok := peek_byte(t, 1); ok && b == '/' {
+                    if comments_block_count == 0 {
+                        t.offset += 2
+                        break
+                    } else {
+                        comments_block_count -= 1
+                    }
+                }
+            } else if is_char(t, '/') {
+                if b, ok := peek_byte(t, 1); ok && b == '*' {
+                    comments_block_count += 1
+                    t.offset += 1
+                }
+            }
+
+            t.offset += 1
+        }
+    }
+}
+
 parse_string_literal :: proc(t: ^Jai_Tokenizer, token: ^Token) {
     token.kind = .String_Literal
     escape_found := false
@@ -257,6 +430,25 @@ parse_string_literal :: proc(t: ^Jai_Tokenizer, token: ^Token) {
 
     if is_eof(t) do return
     t.offset += 1
+}
+
+parse_tab :: proc(t: ^Tokenizer, token: ^Token) {
+    token.kind = .Punctuation
+    token.variant = .Tab
+    t.offset += 1
+    for !is_eof(t) && is_char(t, '\t') do t.offset += 1
+}
+
+parse_tilde :: proc(t: ^Tokenizer, token: ^Token) {
+    token.kind = .Operation
+    token.variant = .Tilde
+    t.offset += 1
+    if is_eof(t) do return
+
+    if is_char(t, '=') {
+        token.variant = .Tilde_Equal
+        t.offset += 1
+    }
 }
 
 read_jai_word :: proc(t: ^Tokenizer) -> string {

@@ -123,7 +123,7 @@ draw_code :: proc(pane: ^Pane, font: ^Font, pen: Vector2, code_lines: []Code_Lin
         if .Line_Wrappings not_in pane.flags {
             sx -= i32(pane.x_offset) * font.xadvance
         }
-        sy := pen.y + (i32(y_offset) * font.line_height)
+        sy := pen.y + (i32(y_offset) * font.character_height)
         ends_with_whitespace := false
 
         for r, x_offset in code.line {
@@ -135,7 +135,7 @@ draw_code :: proc(pane: ^Pane, font: ^Font, pen: Vector2, code_lines: []Code_Lin
 
             if highlighted {
                 set_color(hl.background)
-                draw_rect(sx, sy, glyph.w, glyph.h, true)
+                draw_rect(sx, sy, font.em_width, font.character_height)
             }
 
             if hl.foreground != .undefined {
@@ -155,7 +155,7 @@ draw_code :: proc(pane: ^Pane, font: ^Font, pen: Vector2, code_lines: []Code_Lin
 
         if highlighted && hl.expands_line {
             set_color(hl.background)
-            draw_rect(sx, sy, window_width - sx, font.line_height, true)
+            draw_rect(sx, sy, window_width - sx, font.character_height, true)
         }
 
         if settings.show_trailing_whitespaces && ends_with_whitespace {
@@ -193,7 +193,7 @@ draw_code :: proc(pane: ^Pane, font: ^Font, pen: Vector2, code_lines: []Code_Lin
 
             if !is_cursor_around {
                 set_color(.ui_trailing_whitespace)
-                draw_rect(sx, sy, -(font.em_width * i32(count_of_whitespaces)), font.line_height, true)
+                draw_rect(sx, sy, -(font.em_width * i32(count_of_whitespaces)), font.character_height, true)
             }
         }
     }
@@ -252,8 +252,8 @@ draw_gutter :: proc(pane: ^Pane) {
 
     pane_height := i32(pane.rect.h)
     font := fonts_map[.UI_Small]
-    regular_character_height := pane.font.line_height
-    line_number_character_height := font.line_height
+    regular_character_height := pane.font.character_height
+    line_number_character_height := font.character_height
     y_offset_for_centering := (regular_character_height - line_number_character_height)/2
     buffer_lines := pane.buffer.line_starts[:]
     visible_rows := get_pane_visible_rows(pane)
@@ -369,7 +369,7 @@ draw_modeline :: proc(pane: ^Pane) {
         if global_widget.active do modeline_y_pos -= i32(global_widget.rect.h)
     }
 
-    y_offset_for_centering := (modeline_height - font_regular.line_height)/2
+    y_offset_for_centering := (modeline_height - font_regular.character_height)/2
 
     left_pen := Vector2{0, modeline_y_pos  + y_offset_for_centering}
     right_pen := Vector2{i32(pane.rect.w), left_pen.y}
@@ -477,7 +477,7 @@ draw_highlighted_text :: proc(
 
         if r == '\n' {
             sx = pen.x
-            sy += font.line_height
+            sy += font.character_height
             continue
         }
 
@@ -486,7 +486,7 @@ draw_highlighted_text :: proc(
 
         if highlighted && !selected {
             set_color(highlight_bg_face)
-            draw_rect(sx, sy, glyph.xadvance, glyph.h)
+            draw_rect(sx, sy, font.em_width, font.character_height)
             set_color(highlight_fg_face, font.texture)
         }
 
@@ -534,7 +534,7 @@ draw_text :: proc(font: ^Font, pen: Vector2, text: string) -> (pen2: Vector2) {
 
         if r == '\n' {
             sx = pen.x
-            sy += font.line_height
+            sy += font.character_height
             continue
         }
 

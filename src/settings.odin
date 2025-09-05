@@ -245,10 +245,10 @@ use_nawe_keybindings :: proc() {
     commands_map["ALT-V"]          = .move_prev_page
     commands_map["CTRL-V"]         = .move_next_page
 
-    commands_map["CTRL-X-CTRL-1"]  = .close_other_panes
-    commands_map["CTRL-X-CTRL-0"]  = .close_this_pane
-    commands_map["CTRL-X-CTRL-3"]  = .new_pane_to_the_right
-    commands_map["CTRL-X-CTRL-O"]  = .other_pane
+    commands_map["CTRL-X-1"]       = .close_other_panes
+    commands_map["CTRL-X-0"]       = .close_this_pane
+    commands_map["CTRL-X-3"]       = .new_pane_to_the_right
+    commands_map["CTRL-X-O"]       = .other_pane
     commands_map["ALT-O"]          = .other_pane
 
     commands_map["CTRL-W"]         = .cut_selection
