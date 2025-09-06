@@ -68,6 +68,7 @@ Settings :: struct {
 
     show_line_numbers:                                      bool,
     maximize_window_on_start:                               bool,
+    use_desktop_file:                                       bool,
     modeline_position:                                      Modeline_Position,
 }
 
@@ -83,12 +84,13 @@ settings_init :: proc() {
     settings.show_trailing_whitespaces          = true
     settings.purge_trailing_whitespaces_on_save = true
 
-    settings.default_tab_size         = 4
-    settings.default_tab_character    = .space
+    settings.default_tab_size             = 4
+    settings.default_tab_character        = .space
     settings.derive_indentation_from_file = true
 
     settings.show_line_numbers        = true
     settings.maximize_window_on_start = true
+    settings.use_desktop_file         = true
     settings.modeline_position        = .bottom
 
     colorscheme[.background]                        = hex_to_color(0x050505)
@@ -97,8 +99,8 @@ settings_init :: proc() {
     colorscheme[.cursor_active]                     = hex_to_color(0xcd950c)
     colorscheme[.cursor_inactive]                   = hex_to_color(0x98a098)
     colorscheme[.region]                            = hex_to_color(0x0a0b62)
-    colorscheme[.search_background]                 = hex_to_color(0xd2d2d2)
-    colorscheme[.search_foreground]                 = hex_to_color(0x010101)
+    colorscheme[.search_background]                 = hex_to_color(0xa08563)
+    colorscheme[.search_foreground]                 = hex_to_color(0x050505)
 
     colorscheme[.code_builtin]                      = hex_to_color(0x875e9a)
     colorscheme[.code_comment]                      = hex_to_color(0xe27d51)

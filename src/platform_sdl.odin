@@ -100,7 +100,7 @@ platform_init :: proc() {
     }
 
     when ODIN_OS == .Windows {
-        base_working_dir = filepath.volume_name(os.get_current_directory())
+        base_working_dir = filepath.volume_name(curr_working_dir)
     } else {
         base_working_dir = strings.clone("/")
     }

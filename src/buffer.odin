@@ -71,7 +71,6 @@ History_State :: struct {
 buffer_get_or_create_empty :: proc(name: string = "*scratchpad*") -> ^Buffer {
     for buffer in open_buffers {
         if buffer.name == name {
-            log.debugf("using existing buffer with name '{}'", name)
             return buffer
         }
     }
@@ -89,7 +88,6 @@ buffer_get_or_create_empty :: proc(name: string = "*scratchpad*") -> ^Buffer {
 buffer_get_or_create_from_file :: proc(fullpath: string, contents: []byte) -> ^Buffer {
     for buffer in open_buffers {
         if buffer.filepath == fullpath {
-            log.debugf("found buffer for '{}'", fullpath)
             return buffer
         }
     }

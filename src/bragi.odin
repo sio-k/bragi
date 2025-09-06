@@ -58,7 +58,8 @@ open_buffers:  [dynamic]^Buffer
 open_panes:    [dynamic]^Pane
 global_widget: Widget
 
-base_working_dir:    string
+base_working_dir:    string // used in widget
+curr_working_dir:    string // the executable directory
 last_search_term:    string
 commands_map:        map[string]Command
 events_this_frame:   [dynamic]Event
@@ -103,6 +104,8 @@ main :: proc() {
 
     bragi_allocator = context.allocator
 
+    curr_working_dir = os.get_current_directory()
+
     settings_init()
     platform_init()
     commands_init()
@@ -111,7 +114,7 @@ main :: proc() {
     DEBUG_init()
 
     widget_init()
-    active_pane = pane_create()
+    desktop_init()
 
     bragi_running = true
 
@@ -278,6 +281,8 @@ main :: proc() {
         free_all(context.temp_allocator)
     }
 
+    desktop_save()
+
     widget_close()
     input_destroy()
     fonts_destroy()
@@ -293,11 +298,11 @@ main :: proc() {
     delete(open_panes)
     delete(colorscheme)
     delete(base_working_dir)
+    delete(curr_working_dir)
     delete(last_search_term)
 
     DEBUG_destroy()
     platform_destroy()
-
 
     when BRAGI_DEBUG {
         log.destroy_console_logger(context.logger)

@@ -233,11 +233,6 @@ draw_panes :: proc() {
     profiling_end()
 }
 
-update_pane_font :: #force_inline proc(pane: ^Pane) {
-    scaled_character_height := font_to_scaled_pixels(pane.local_font_size)
-    pane.font = get_font_with_size(FONT_EDITOR_NAME, FONT_EDITOR_DATA, scaled_character_height)
-}
-
 update_all_pane_textures :: proc() {
     // should be safe to clean up textures here since we're probably
     // recreating them due to the change in size
@@ -253,6 +248,11 @@ update_all_pane_textures :: proc() {
         if .Line_Wrappings in pane.flags do recalculate_line_wrappings(pane)
         flag_pane(pane, {.Need_Full_Repaint})
     }
+}
+
+update_pane_font :: #force_inline proc(pane: ^Pane) {
+    scaled_character_height := font_to_scaled_pixels(pane.local_font_size)
+    pane.font = get_font_with_size(FONT_EDITOR_NAME, FONT_EDITOR_DATA, scaled_character_height)
 }
 
 recalculate_line_wrappings :: proc(pane: ^Pane) {
@@ -666,9 +666,13 @@ pane_handle_mouse_events :: proc() {
             }
         }
 
-        flag_pane(active_pane, {.Need_Full_Repaint})
-        active_pane = result
-        flag_pane(active_pane, {.Need_Full_Repaint})
+        if result == nil {
+            flag_pane(active_pane, {.Need_Full_Repaint})
+        } else {
+            flag_pane(active_pane, {.Need_Full_Repaint})
+            active_pane = result
+            flag_pane(active_pane, {.Need_Full_Repaint})
+        }
     }
 
     if mouse_state.scroll_x != 0 || mouse_state.scroll_y != 0 {
@@ -698,7 +702,7 @@ pane_handle_mouse_events :: proc() {
 
         cursor := get_first_active_cursor(pane)
         current := mouse_state.position
-        curr_mpos := Vector2{ current.x - i32(pane.rect.x), current.y - i32(pane.rect.y) }
+        curr_mpos := Vector2{current.x - i32(pane.rect.x), current.y - i32(pane.rect.y)}
         pos_offset := mouse_pos_to_offset(pane, curr_mpos)
         cursor.pos = pos_offset
     } else if mouse_state.left_button.just_clicked {
@@ -746,12 +750,12 @@ mouse_pos_to_offset :: proc(pane: ^Pane, relative_mouse_pos: Vector2) -> int {
         coords.row = 0
         coords.column = min(int(X), len(pane.buffer.text)-1)
     } else {
-        coords.row = min(int(Y), len(lines)-1)
+        coords.row = clamp(int(Y), 0, len(lines)-1)
         start, end := get_line_boundaries(coords.row, lines)
-        coords.column = min(int(X), end - start)
+        coords.column = clamp(int(X), 0, end - start)
     }
 
-    return cursor_coords_to_offset(pane, lines, coords)
+    return clamp(cursor_coords_to_offset(pane, lines, coords), 0, len(pane.buffer.text)-1)
 }
 
 pane_keyboard_event_handler :: proc(event: Event_Keyboard, cmd: Command) -> bool {

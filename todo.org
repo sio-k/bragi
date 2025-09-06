@@ -6,6 +6,8 @@ Bug/Trailing Whitespace: when creating an empty line that is not wrapped, it is 
 
 Bug/Indentation: should skip comments when indenting
 
+Bug/Mouse selecting is crashing when going over the limit
+
 Improvement/Buffer: make the buffer piece table to actually store the line starts and cache them. This is a big improvement for bigger files as after the first load we might just not need to fully calculate lines again. Maybe we can also cache the pieces that have changed.
 
 Improvements/Search: make search interactive. For example, allow a command to create a cursor on each search result.
@@ -20,11 +22,11 @@ Improvement/Speed/Piece Table Cache Absolute Line Starts And Buffer Positions: i
 
 Improvement/Use Commands Instead Of Keys: some places are still using just keys, need to change these to commands so the rebinding works correctly.
 
+Improvement/Prev-Forward Word: should use smarter delimiters
+
 Feature/Mouse: add mouse support to pane/edit
 
 Feature/Marks: save pane/buffer marks for some user actions. Show the existing marks on the pane fringe
-
-* Feature/Desktop mode: save the opened buffers to a history file so they can be reopened on restart.
 
 Feature/Project mode: navigate through project files on find-file or find-buffer easily.
 
