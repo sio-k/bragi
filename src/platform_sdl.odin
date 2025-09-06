@@ -6,8 +6,9 @@ package main
 // works. So in the meantime, I leverage all the power of SDL, but I
 // want to make this from scratch instead.
 
+import     "core:fmt"
 import     "core:log"
-import     "core:os"
+import     "core:os/os2"
 import     "core:path/filepath"
 import     "core:reflect"
 import     "core:strings"
@@ -43,6 +44,14 @@ platform_init :: proc() {
     when BRAGI_DEBUG {
         sdl.SetLogPriorities(.ERROR)
         sdl.SetLogOutputFunction(_platform_sdl_debug_log, nil)
+    }
+
+    if !os2.exists(platform_get_config_dir()) {
+        error := os2.make_directory_all(platform_get_config_dir())
+
+        if error != nil {
+            log.fatalf("failed to create config directory")
+        }
     }
 
     log.debug("initializing SDL")
@@ -105,7 +114,7 @@ platform_init :: proc() {
         base_working_dir = strings.clone("/")
     }
 
-    if !os.is_dir(base_working_dir) {
+    if !os2.is_directory(base_working_dir) {
         log.errorf("base_working_dir '{}' is not a valid dir", base_working_dir)
     }
     profiling_end()
@@ -146,9 +155,9 @@ platform_update_events :: proc() {
         case .QUIT: input_register(Event_Quit{})
         case .DROP_FILE:
             filepath := string(event.drop.data)
-            data, success := os.read_entire_file(filepath)
-            if !success {
-                log.errorf("failed to open file '{}'", filepath)
+            data, error := os2.read_entire_file_from_path(filepath, context.allocator)
+            if error != nil {
+                log.errorf("failed to open file '{}' with error {}", filepath, error)
                 continue
             }
 
@@ -254,6 +263,23 @@ platform_resize_window :: #force_inline proc(w, h: i32) {
     sdl.SetWindowSize(window, w, h)
 }
 
+platform_get_config_dir :: proc() -> string {
+    bragi_dir := "bragi"
+    config_dir, error := os2.user_config_dir(context.temp_allocator)
+
+    // handle error
+    if error != nil {
+        log.fatalf("could not find the config directory")
+        config_dir = curr_working_dir
+    }
+
+    when BRAGI_DEBUG {
+        bragi_dir = "bragi/debug"
+    }
+
+    return fmt.tprintf("{}/{}", config_dir, bragi_dir)
+}
+
 platform_get_mouse_position :: proc() -> (f32, f32) {
     mx, my: f32
     _ = sdl.GetMouseState(&mx, &my)
@@ -275,7 +301,6 @@ platform_mouse_button_down :: proc(b: Mouse_Button) -> bool {
 
     return false
 }
-
 
 platform_toggle_cursor :: proc(show: bool) {
     if show {

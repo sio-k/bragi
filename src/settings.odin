@@ -69,6 +69,7 @@ Settings :: struct {
     show_line_numbers:                                      bool,
     maximize_window_on_start:                               bool,
     use_desktop_file:                                       bool,
+    max_buffers_to_save_in_desktop:                         int,
     modeline_position:                                      Modeline_Position,
 }
 
@@ -88,10 +89,11 @@ settings_init :: proc() {
     settings.default_tab_character        = .space
     settings.derive_indentation_from_file = true
 
-    settings.show_line_numbers        = true
-    settings.maximize_window_on_start = true
-    settings.use_desktop_file         = true
-    settings.modeline_position        = .bottom
+    settings.show_line_numbers               = true
+    settings.maximize_window_on_start        = true
+    settings.use_desktop_file                = true
+    settings.max_buffers_to_save_in_desktop  = 15
+    settings.modeline_position               = .bottom
 
     colorscheme[.background]                        = hex_to_color(0x050505)
     colorscheme[.foreground]                        = hex_to_color(0xa08563)
@@ -250,6 +252,8 @@ use_nawe_keybindings :: proc() {
     commands_map["ALT-F"]          = .move_next_word
     commands_map["ALT-V"]          = .move_prev_page
     commands_map["CTRL-V"]         = .move_next_page
+
+    commands_map["CTRL-X-CTRL-P"]  = .select_all
 
     commands_map["CTRL-X-1"]       = .close_other_panes
     commands_map["CTRL-X-0"]       = .close_this_pane

@@ -20,24 +20,26 @@ Widget_Action :: enum {
 }
 
 Widget :: struct {
-    active:                bool,
-    cursor:                Widget_Cursor,
-    cursor_selecting:      bool,
-    cursor_showing:        bool,
-    cursor_blink_timer:    time.Tick,
+    active:               bool,
+    cursor:               Widget_Cursor,
+    cursor_selecting:     bool,
+    cursor_showing:       bool,
+    cursor_blink_timer:   time.Tick,
 
-    action:                Widget_Action,
-    all_results:           [dynamic]Widget_Result, // the one to keep
-    view_results:          []Widget_Result,        // the one to show, filtered and sorted
-    results_need_update:   bool,
-    prompt:                strings.Builder,
-    prompt_question:       string,
-    ask_for_confirmation:  bool,
+    action:               Widget_Action,
+    all_results:          [dynamic]Widget_Result, // the one to keep
+    view_results:         []Widget_Result,        // the one to show, filtered and sorted
+    results_need_update:  bool,
+    prompt:               strings.Builder,
+    prompt_question:      string,
+    ask_for_confirmation: bool,
 
-    font:                  ^Font,
-    texture:               ^Texture,
-    rect:                  Rect,
-    y_offset:              int,
+    previous_buffer:      ^Buffer,
+
+    font:                 ^Font,
+    texture:              ^Texture,
+    rect:                 Rect,
+    y_offset:             int,
 }
 
 Widget_Cursor :: struct {
@@ -91,15 +93,15 @@ widget_open_find_buffer :: proc() {
     for buffer in open_buffers {
         if active_pane.buffer.uuid == buffer.uuid do continue
         append(&global_widget.all_results, Widget_Result{
-            format     = _get_find_buffer_format(buffer),
-            value      = buffer,
+            format = _get_find_buffer_format(buffer),
+            value  = buffer,
         })
     }
 
     slice.stable_sort_by(
         global_widget.all_results[:], proc(a: Widget_Result, b: Widget_Result) -> bool {
             buf1, buf2 := a.value.(^Buffer), b.value.(^Buffer)
-            return time.tick_since(buf1.last_backup_time) < time.tick_since(buf2.last_backup_time)
+            return time.tick_since(buf1.last_active_time) < time.tick_since(buf2.last_active_time)
         },
     )
 
@@ -282,12 +284,23 @@ _widget_open :: proc() {
     global_widget.cursor.index = -1
     global_widget.active = true
     global_widget.ask_for_confirmation = false
+    global_widget.previous_buffer = active_pane.buffer
     flag_pane(active_pane, {.Need_Full_Repaint})
 }
 
-widget_close :: proc() {
+widget_close :: proc(was_quit := false) {
     if !global_widget.active do return
     global_widget.active = false
+
+    if was_quit {
+        switch global_widget.action {
+        case .Find_Buffer:
+            switch_to_buffer(active_pane, global_widget.previous_buffer)
+        case .Find_File:
+        case .Save_File_As:
+        case .Search_In_Buffer:
+        }
+    }
 
     for r in global_widget.all_results {
         delete(r.format)
@@ -305,6 +318,8 @@ widget_close :: proc() {
 
     clear(&active_pane.regions)
     strings.builder_destroy(&global_widget.prompt)
+
+    global_widget.previous_buffer = nil
 }
 
 widget_keyboard_event_handler :: proc(event: Event_Keyboard, cmd: Command) -> (handled: bool) {
@@ -342,127 +357,113 @@ widget_keyboard_event_handler :: proc(event: Event_Keyboard, cmd: Command) -> (h
         global_widget.ask_for_confirmation = false
     }
 
-    #partial switch event.key_code {
-        case .K_BACKSPACE: {
-            if cursor.pos != cursor.sel {
-                _remove_selection()
-                return true
-            }
-
-            start := max(cursor.pos - 1, 0)
-
-            if .Ctrl in event.modifiers || .Alt in event.modifiers {
-                for start > 0 && slice.contains(word_delim_bytes[:], prompt[start-1])  do start -= 1
-                for start > 0 && !slice.contains(word_delim_bytes[:], prompt[start-1]) do start -= 1
-            }
-
-            end := cursor.pos
-            remove_range(&global_widget.prompt.buf, start, end)
-            cursor.pos = start
-            cursor.sel = start
-            global_widget.results_need_update = true
-            global_widget.cursor_selecting = false
-            return true
-        }
-        case .K_DELETE: {
-            if cursor.pos != cursor.sel {
-                _remove_selection()
-                return true
-            }
-
-            start := cursor.pos
-            end := min(cursor.pos + 1, len(prompt))
-
-            if .Ctrl in event.modifiers || .Alt in event.modifiers {
-                end = len(prompt)
-            }
-
-            remove_range(&global_widget.prompt.buf, start, end)
-            global_widget.results_need_update = true
-            global_widget.cursor_selecting = false
-            return true
-        }
-    }
-
     #partial switch cmd {
-        case .toggle_selection_mode: {
-            if global_widget.cursor_selecting {
-                cursor.sel = cursor.pos
-            }
-
-            global_widget.cursor_selecting = !global_widget.cursor_selecting
-            return true
-
+    case .toggle_selection_mode:
+        if global_widget.cursor_selecting {
+            cursor.sel = cursor.pos
         }
-        case .select_all: {
-            cursor.pos = 0
+
+        global_widget.cursor_selecting = !global_widget.cursor_selecting
+        return true
+    case .select_all:
+        cursor.pos = 0
+        cursor.sel = len(prompt)
+        return true
+    case .move_beginning_of_buffer, .move_beginning_of_line, .select_beginning_of_buffer, .select_beginning_of_line:
+        cursor.pos = 0
+        if cmd != .select_beginning_of_buffer && cmd != .select_beginning_of_line && !global_widget.cursor_selecting {
+            cursor.sel = 0
+        }
+        return true
+    case .move_end_of_buffer, .move_end_of_line, .select_end_of_buffer, .select_end_of_line:
+        cursor.pos = len(prompt)
+        if cmd != .select_end_of_buffer && cmd != .select_end_of_line && !global_widget.cursor_selecting {
             cursor.sel = len(prompt)
-            return true
         }
-        case .move_beginning_of_buffer, .move_beginning_of_line, .select_beginning_of_buffer, .select_beginning_of_line: {
-            cursor.pos = 0
-            if cmd != .select_beginning_of_buffer && cmd != .select_beginning_of_line && !global_widget.cursor_selecting {
-                cursor.sel = 0
-            }
-            return true
-        }
-        case .move_end_of_buffer, .move_end_of_line, .select_end_of_buffer, .select_end_of_line: {
-            cursor.pos = len(prompt)
-            if cmd != .select_end_of_buffer && cmd != .select_end_of_line && !global_widget.cursor_selecting {
-                cursor.sel = len(prompt)
-            }
-            return true
-        }
-        case .move_up, .select_up: {
-            cursor.index -= 1
-            if cursor.index < -1 do cursor.index = len(global_widget.view_results) - 1
-            return true
-        }
-        case .move_down, .select_down: {
-            cursor.index += 1
-            if cursor.index >= len(global_widget.view_results) do cursor.index = 0
-            return true
-        }
-        case .move_left, .select_left: {
-            cursor.pos -= 1
-            for cursor.pos > 0 && is_continuation_byte(prompt[cursor.pos]) do cursor.pos -= 1
-            cursor.pos = max(cursor.pos, 0)
+        return true
+    case .move_up, .select_up:
+        cursor.index -= 1
+        if cursor.index < -1 do cursor.index = len(global_widget.view_results) - 1
+        return true
+    case .move_down, .select_down:
+        cursor.index += 1
+        if cursor.index >= len(global_widget.view_results) do cursor.index = 0
+        return true
+    case .move_left, .select_left:
+        cursor.pos -= 1
+        for cursor.pos > 0 && is_continuation_byte(prompt[cursor.pos]) do cursor.pos -= 1
+        cursor.pos = max(cursor.pos, 0)
 
-            if cmd != .select_left && !global_widget.cursor_selecting {
-                cursor.sel = cursor.pos
-            }
-            return true
+        if cmd != .select_left && !global_widget.cursor_selecting {
+            cursor.sel = cursor.pos
         }
-        case .move_right, .select_right: {
-            cursor.pos += 1
-            for cursor.pos < len(prompt) && is_continuation_byte(prompt[cursor.pos]) do cursor.pos += 1
-            cursor.pos = min(cursor.pos, len(prompt))
-            if cmd != .select_right && !global_widget.cursor_selecting {
-                cursor.sel = cursor.pos
-            }
-            return true
+        return true
+    case .move_right, .select_right:
+        cursor.pos += 1
+        for cursor.pos < len(prompt) && is_continuation_byte(prompt[cursor.pos]) do cursor.pos += 1
+        cursor.pos = min(cursor.pos, len(prompt))
+        if cmd != .select_right && !global_widget.cursor_selecting {
+            cursor.sel = cursor.pos
         }
-        case .move_prev_word, .move_prev_paragraph, .select_prev_word, .select_prev_paragraph: {
-            for cursor.pos > 0 && slice.contains(word_delim_bytes[:], prompt[cursor.pos-1])  do cursor.pos -= 1
-            for cursor.pos > 0 && !slice.contains(word_delim_bytes[:], prompt[cursor.pos-1]) do cursor.pos -= 1
-            if cmd != .select_prev_word && cmd != .select_prev_paragraph && !global_widget.cursor_selecting {
-                cursor.sel = cursor.pos
-            }
-            return true
+        return true
+    case .move_prev_word, .move_prev_paragraph, .select_prev_word, .select_prev_paragraph:
+        for cursor.pos > 0 && slice.contains(word_delim_bytes[:], prompt[cursor.pos-1])  do cursor.pos -= 1
+        for cursor.pos > 0 && !slice.contains(word_delim_bytes[:], prompt[cursor.pos-1]) do cursor.pos -= 1
+        if cmd != .select_prev_word && cmd != .select_prev_paragraph && !global_widget.cursor_selecting {
+            cursor.sel = cursor.pos
         }
-        case .move_next_word, .move_next_paragraph, .select_next_word, .select_next_paragraph: {
-            for cursor.pos < len(prompt) && !slice.contains(word_delim_bytes[:], prompt[cursor.pos]) do cursor.pos += 1
-            for cursor.pos < len(prompt) && slice.contains(word_delim_bytes[:], prompt[cursor.pos])  do cursor.pos += 1
-            if cmd != .select_next_word && cmd != .select_next_paragraph && !global_widget.cursor_selecting {
-                cursor.sel = cursor.pos
-            }
-            return true
+        return true
+    case .move_next_word, .move_next_paragraph, .select_next_word, .select_next_paragraph:
+        for cursor.pos < len(prompt) && !slice.contains(word_delim_bytes[:], prompt[cursor.pos]) do cursor.pos += 1
+        for cursor.pos < len(prompt) && slice.contains(word_delim_bytes[:], prompt[cursor.pos])  do cursor.pos += 1
+        if cmd != .select_next_word && cmd != .select_next_paragraph && !global_widget.cursor_selecting {
+            cursor.sel = cursor.pos
         }
-        case .cut_line: {
-            cursor.sel = len(prompt)
+        return true
+    case .remove_left, .remove_prev_word:
+        if cursor.pos != cursor.sel {
             _remove_selection()
             return true
         }
+
+        start := max(cursor.pos - 1, 0)
+        if cmd == .remove_prev_word {
+            for start > 0 && slice.contains(word_delim_bytes[:], prompt[start-1])  do start -= 1
+            for start > 0 && !slice.contains(word_delim_bytes[:], prompt[start-1]) do start -= 1
+        }
+
+        end := cursor.pos
+        remove_range(&global_widget.prompt.buf, start, end)
+        cursor.pos = start
+        cursor.sel = start
+        global_widget.results_need_update = true
+        global_widget.cursor_selecting = false
+        return true
+    case .remove_right, .remove_next_word:
+        if cursor.pos != cursor.sel {
+            _remove_selection()
+            return true
+        }
+
+        start := cursor.pos
+        end := min(cursor.pos + 1, len(prompt))
+
+        if cmd == .remove_next_word {
+            end = len(prompt)
+        }
+
+        remove_range(&global_widget.prompt.buf, start, end)
+        global_widget.results_need_update = true
+        global_widget.cursor_selecting = false
+        return true
+    case .cut_line:
+        cursor.sel = len(prompt)
+        _remove_selection()
+        return true
+    case .paste:
+        text := platform_get_clipboard_text()
+        if len(text) > 0 do strings.write_string(&global_widget.prompt, text)
+        return true
     }
 
     switch global_widget.action {
@@ -833,11 +834,15 @@ _search_in_buffer_widget_update :: proc() {
         if buf[left_index] == query[0] && left_index + query_len < buf_len {
             test_word := buf[left_index:left_index + query_len]
             if query == test_word {
+                word_start_index, _ := translate_position(active_pane, left_index, .beginning_of_word)
+                start := left_index - word_start_index
+                end := start+query_len
+
                 result := Widget_Result{
-                    format = _get_search_in_buffer_format(left_index),
+                    format = _get_search_in_buffer_format(word_start_index, left_index),
                     value  = left_index,
                 }
-                append(&result.highlights, Range{0, query_len})
+                append(&result.highlights, Range{start, end})
                 append(&global_widget.all_results, result)
 
                 append(&active_pane.regions, Highlight{
@@ -856,11 +861,15 @@ _search_in_buffer_widget_update :: proc() {
         if buf[right_index] == query[0] && right_index + query_len < buf_len {
             test_word := buf[right_index:right_index + query_len]
             if query == test_word {
+                word_start_index, _ := translate_position(active_pane, right_index, .beginning_of_word)
+                start := right_index - word_start_index
+                end := start+query_len
+
                 result := Widget_Result{
-                    format = _get_search_in_buffer_format(right_index),
+                    format = _get_search_in_buffer_format(word_start_index, right_index),
                     value  = right_index,
                 }
-                append(&result.highlights, Range{0, query_len})
+                append(&result.highlights, Range{start, end})
                 append(&global_widget.all_results, result)
 
                 append(&active_pane.regions, Highlight{
@@ -1051,14 +1060,14 @@ _get_find_file_format :: proc(file: os.File_Info) -> string {
 }
 
 @(private="file")
-_get_search_in_buffer_format :: proc(offset: int) -> string {
+_get_search_in_buffer_format :: proc(offset, found: int) -> string {
     MAX_LENGTH  :: 60
     MIN_PADDING :: 5
 
     pane := active_pane
     start := offset
     end := start
-    coords := cursor_offset_to_coords(pane, get_lines_array(pane), offset)
+    coords := cursor_offset_to_coords(pane, get_lines_array(pane), found)
 
     for r in pane.buffer.text[start:] {
         if r == '\n' do break

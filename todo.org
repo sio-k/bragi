@@ -24,6 +24,8 @@ Improvement/Use Commands Instead Of Keys: some places are still using just keys,
 
 Improvement/Prev-Forward Word: should use smarter delimiters
 
+Improvement/Desktop File: add versioning
+
 Feature/Mouse: add mouse support to pane/edit
 
 Feature/Marks: save pane/buffer marks for some user actions. Show the existing marks on the pane fringe

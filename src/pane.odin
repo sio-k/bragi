@@ -29,6 +29,7 @@ Translation :: enum u16 {
     prev_page, next_page,
     beginning_of_buffer, end_of_buffer,
     beginning_of_line, end_of_line,
+    beginning_of_word, end_of_word,
 }
 
 Pane :: struct {
@@ -1529,9 +1530,6 @@ translate_position :: proc(pane: ^Pane, pos: int, t: Translation, max_column := 
     visible_rows := get_pane_visible_rows(pane)
 
     switch t {
-    case .beginning_of_buffer: result = 0
-    case .end_of_buffer:       result = len(buf)
-
     case .down:
         coords := cursor_offset_to_coords(pane, lines, result)
         coords.row = min(coords.row + 1, len(lines))
@@ -1600,6 +1598,9 @@ translate_position :: proc(pane: ^Pane, pos: int, t: Translation, max_column := 
         coords := cursor_offset_to_coords(pane, lines, result)
         coords.row = min(coords.row + visible_rows, len(lines) - 1)
         result = cursor_coords_to_offset(pane, lines, coords)
+
+    case .beginning_of_buffer: result = 0
+    case .end_of_buffer:       result = len(buf)
     case .beginning_of_line:
         coords := cursor_offset_to_coords(pane, lines, result)
         last_column = -1
@@ -1618,6 +1619,10 @@ translate_position :: proc(pane: ^Pane, pos: int, t: Translation, max_column := 
         _, end := get_line_boundaries(coords.row, lines)
         last_column = -1
         result = end
+    case .beginning_of_word:
+        for result > 0 && !is_space(buf[result-1]) do result -= 1
+    case .end_of_word:
+        for result < len(buf) && !is_space(buf[result]) do result += 1
     }
 
     result = clamp(result, 0, len(buf))

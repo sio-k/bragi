@@ -129,7 +129,7 @@ map_keystroke_to_command :: proc(key: Key_Code, modifiers: Modifiers_Set, loc :=
 }
 
 quit_mode_command :: proc() {
-    widget_close()
+    widget_close(was_quit=true)
     active_pane.cursor_selecting = false
 
     if len(active_pane.cursors) > 1 {

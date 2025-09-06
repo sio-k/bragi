@@ -54,6 +54,7 @@ Buffer :: struct {
     filepath:         string,
     major_mode:       Major_Mode,
     flags:            Buffer_Flags,
+    last_active_time: time.Tick,
 }
 
 Piece :: struct {
@@ -394,6 +395,7 @@ update_opened_buffers :: proc() {
         if .Dirty in buffer.flags {
             profiling_start("putting pieces together and making lines array")
             unflag_buffer(buffer, {.Dirty})
+            buffer.last_active_time = time.tick_now()
             if len(buffer.pieces) == 0 do append(&buffer.pieces, _create_original_piece())
             temp_builder := strings.builder_make(context.temp_allocator)
             clear(&buffer.line_starts)

@@ -8,6 +8,7 @@ import "core:reflect"
 import "core:slice"
 import "core:strconv"
 import "core:strings"
+import "core:time"
 
 DESKTOP_FILENAME :: "bragi-desktop"
 
@@ -125,13 +126,23 @@ desktop_save :: proc() {
 
     strings.write_string(&result, "::buffers\n")
 
-    for buffer in open_buffers {
-        if buffer.filepath != "" {
-            strings.write_string(&result, fmt.tprintf(":{}\n", buffers_count))
+    buffers_to_check := slice.filter(
+        open_buffers[:],
+        proc(buffer: ^Buffer) -> bool { return buffer.filepath != "" },
+        context.temp_allocator,
+    )
+    slice.stable_sort_by(
+        buffers_to_check[:], proc(i, j: ^Buffer) -> bool {
+            return time.tick_since(i.last_active_time) < time.tick_since(j.last_active_time)
+        },
+    )
 
-            strings.write_string(&result, fmt.tprintf("filepath={}\n", buffer.filepath))
-            buffers_count += 1
-        }
+    for buffer in buffers_to_check {
+        strings.write_string(&result, fmt.tprintf(":{}\n", buffers_count))
+
+        strings.write_string(&result, fmt.tprintf("filepath={}\n", buffer.filepath))
+        buffers_count += 1
+        if buffers_count >= settings.max_buffers_to_save_in_desktop do break
     }
 
     strings.write_string(&result, "::panes\n")
@@ -162,7 +173,7 @@ desktop_save :: proc() {
 }
 
 get_desktop_filepath :: proc() -> string {
-    return fmt.tprintf("{}/{}", curr_working_dir, DESKTOP_FILENAME)
+    return fmt.tprintf("{}/{}", platform_get_config_dir(), DESKTOP_FILENAME)
 }
 
 parse_desktop_file :: proc(data: string) -> (result: Desktop_File_Parser) {
