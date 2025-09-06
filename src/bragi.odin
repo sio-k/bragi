@@ -58,12 +58,14 @@ open_buffers:  [dynamic]^Buffer
 open_panes:    [dynamic]^Pane
 global_widget: Widget
 
-base_working_dir:  string
-last_search_term:  string
-commands_map:      map[string]Command
-events_this_frame: [dynamic]Event
-last_keystroke:    time.Tick
-modifiers_queue:   [dynamic]string
+base_working_dir:    string
+last_search_term:    string
+commands_map:        map[string]Command
+events_this_frame:   [dynamic]Event
+last_keystroke:      time.Tick
+modifiers_queue:     [dynamic]string
+mouse_state:         Mouse_State
+previous_frame_time: time.Tick
 
 bragi_allocator:   runtime.Allocator
 bragi_context:     runtime.Context
@@ -111,8 +113,6 @@ main :: proc() {
     widget_init()
     active_pane = pane_create()
 
-    previous_frame_time := time.tick_now()
-
     bragi_running = true
 
     log.debugf(
@@ -120,10 +120,14 @@ main :: proc() {
         time.duration_milliseconds(time.since(initialization_time)),
     )
 
+    previous_frame_time = time.tick_now()
+
     for bragi_running {
-        platform_update_events()
 
         profiling_start("parsing events")
+
+        input_update_mouse_state()
+        platform_update_events()
 
         // NOTE(nawe) text input events come with their singular key
         // pressed event as well. If the event was handled by the key
@@ -131,6 +135,8 @@ main :: proc() {
         text_input_events_to_ignore_this_frame := 0
 
         for &event in events_this_frame {
+            last_keystroke = time.tick_now()
+
             switch v in event.variant {
             case Event_Drop_File:
                 found := false
@@ -150,6 +156,10 @@ main :: proc() {
 
                 event.handled = true
             case Event_Keyboard:
+                if v.is_text_input && settings.hide_mouse_while_typing {
+                    platform_toggle_cursor(false)
+                }
+
                 if v.is_text_input && text_input_events_to_ignore_this_frame > 0 {
                     text_input_events_to_ignore_this_frame -= 1
                     event.handled = true
@@ -194,15 +204,7 @@ main :: proc() {
                 }
 
                 event.handled = handled
-                last_keystroke = time.tick_now()
             case Event_Mouse:
-                DEBUG_handle_input(event)
-
-                // mouse events are not really important for Bragi, we
-                // expect the user to prefer keyboard input when
-                // navigating and using it, so we don't debug these
-                // events too much.
-                event.handled = true
             case Event_Quit:
                 bragi_running = false
                 event.handled = true
@@ -255,6 +257,8 @@ main :: proc() {
                 event.handled = true
             }
         }
+
+        pane_handle_mouse_events()
         profiling_end()
 
         set_color(.background)

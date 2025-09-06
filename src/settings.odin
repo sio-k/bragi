@@ -59,6 +59,8 @@ Settings :: struct {
 
     cursor_is_a_block:        bool,
     cursor_width:             int,
+    mouse_scroll_threshold:   int,
+    hide_mouse_while_typing:  bool,
 
     default_tab_size:         int,
     default_tab_character:    Tab_Character,
@@ -70,10 +72,12 @@ Settings :: struct {
 }
 
 settings_init :: proc() {
-    settings.editor_font_size  = 24
-    settings.ui_font_size      = 20
-    settings.cursor_is_a_block = true
-    settings.cursor_width      = 2
+    settings.editor_font_size        = 24
+    settings.ui_font_size            = 20
+    settings.cursor_is_a_block       = true
+    settings.cursor_width            = 2
+    settings.mouse_scroll_threshold  = 5
+    settings.hide_mouse_while_typing = true
 
     settings.always_wrap_lines                  = true
     settings.show_trailing_whitespaces          = true

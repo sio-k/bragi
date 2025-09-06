@@ -649,6 +649,107 @@ maybe_scroll_pane_to_cursor_view :: proc(pane: ^Pane) {
     if has_scrolled do flag_pane(pane, {.Need_Full_Repaint})
 }
 
+pane_handle_mouse_events :: proc() {
+    set_pane_at_mouse_pos_as_active :: proc() {
+        mx, my := mouse_state.position.x, mouse_state.position.y
+        result: ^Pane
+
+        for pane in open_panes {
+            left := i32(pane.rect.x)
+            right := left + i32(pane.rect.w)
+            up := i32(pane.rect.y)
+            down := up + i32(pane.rect.h)
+
+            if mx >= left && mx <= right && my >= up && my <= down {
+                result = pane
+                break
+            }
+        }
+
+        flag_pane(active_pane, {.Need_Full_Repaint})
+        active_pane = result
+        flag_pane(active_pane, {.Need_Full_Repaint})
+    }
+
+    if mouse_state.scroll_x != 0 || mouse_state.scroll_y != 0 {
+        set_pane_at_mouse_pos_as_active()
+        pane := active_pane
+        lines := get_lines_array(pane)
+        visible_rows := get_pane_visible_rows(pane)
+        scroll_x := int(mouse_state.scroll_x) * settings.mouse_scroll_threshold
+        scroll_y := int(mouse_state.scroll_y) * settings.mouse_scroll_threshold
+
+        if .Line_Wrappings in pane.flags {
+            new_offset := pane.x_offset + scroll_x
+            pane.x_offset = max(new_offset, 0)
+        }
+
+        if len(lines) > visible_rows {
+            new_y_offset := pane.y_offset + scroll_y
+            pane.y_offset = clamp(new_y_offset, 0, len(lines) - visible_rows/2)
+        }
+    }
+
+    if mouse_state.left_button.is_dragging {
+        set_pane_at_mouse_pos_as_active()
+        pane := active_pane
+
+        if len(pane.buffer.text) == 0 do return
+
+        cursor := get_first_active_cursor(pane)
+        current := mouse_state.position
+        curr_mpos := Vector2{ current.x - i32(pane.rect.x), current.y - i32(pane.rect.y) }
+        pos_offset := mouse_pos_to_offset(pane, curr_mpos)
+        cursor.pos = pos_offset
+    } else if mouse_state.left_button.just_clicked {
+        set_pane_at_mouse_pos_as_active()
+        pane := active_pane
+
+        if len(pane.buffer.text) == 0 do return
+
+        lines := get_lines_array(pane)
+        mx, my := mouse_state.position.x, mouse_state.position.y
+        relative_mouse_pos := Vector2{ mx - i32(pane.rect.x), my - i32(pane.rect.y) }
+        offset := mouse_pos_to_offset(pane, relative_mouse_pos)
+        clear(&pane.cursors)
+        add_cursor(pane, offset)
+        pane.cursor_moved = true
+
+        if mouse_state.left_button.just_double_clicked {
+            cursor := get_first_active_cursor(pane)
+            pos, _ := translate_position(pane, cursor.pos, .next_word)
+            sel, _ := translate_position(pane, cursor.pos, .prev_word)
+            cursor.pos = pos
+            cursor.sel = sel
+        } else if mouse_state.left_button.just_triple_clicked {
+            cursor := get_first_active_cursor(pane)
+            line_index := get_line_index(cursor.pos, lines)
+            start, end := get_line_boundaries(line_index, lines)
+            cursor.pos = end + 1
+            cursor.sel = start
+        }
+    }
+}
+
+mouse_pos_to_offset :: proc(pane: ^Pane, relative_mouse_pos: Vector2) -> int {
+    lines := get_lines_array(pane)
+    gutter_size := get_gutter_size(pane)
+    coords: Coords
+    Y := relative_mouse_pos.y/pane.font.character_height + i32(pane.y_offset)
+    X := max((relative_mouse_pos.x - gutter_size)/pane.font.xadvance, 0) + i32(pane.x_offset)
+
+    if len(lines) == 2 {
+        coords.row = 0
+        coords.column = min(int(X), len(pane.buffer.text)-1)
+    } else {
+        coords.row = min(int(Y), len(lines)-1)
+        start, end := get_line_boundaries(coords.row, lines)
+        coords.column = min(int(X), end - start)
+    }
+
+    return cursor_coords_to_offset(pane, lines, coords)
+}
+
 pane_keyboard_event_handler :: proc(event: Event_Keyboard, cmd: Command) -> bool {
     pane := active_pane
     buffer := pane.buffer

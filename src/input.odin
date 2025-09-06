@@ -270,12 +270,11 @@ Key_Code :: enum u32 {
 }
 
 Mouse_Button :: enum u8 {
-    None    = 0,
-    Left    = 1,
-    Middle  = 2,
-    Right   = 3,
-    Extra_1 = 4,
-    Extra_2 = 5,
+    Left    = 0,
+    Middle  = 1,
+    Right   = 2,
+    Extra_1 = 3,
+    Extra_2 = 4,
 }
 
 Key_Mod :: enum u8 {
@@ -340,6 +339,30 @@ Event_Window :: struct {
     window_focused:   bool,
 }
 
+Mouse_State :: struct {
+    has_moved:     bool,
+    position:      Vector2,
+    last_position: Vector2,
+    scroll_x:      f32,
+    scroll_y:      f32,
+
+    left_button:   Mouse_Button_State,
+    middle_button: Mouse_Button_State,
+    right_button:  Mouse_Button_State,
+}
+
+Mouse_Button_State :: struct {
+    is_down:                  bool,
+    is_dragging:              bool,
+    just_clicked:             bool,
+    just_double_clicked:      bool,
+    just_triple_clicked:      bool,
+    last_clicked_position:    Vector2,
+    last_clicked_time:        time.Tick,
+    last_double_clicked_time: time.Tick,
+}
+
+
 input_key_code_to_string :: #force_inline proc(key_code: Key_Code) -> string {
     assert(key_code != .UNDEFINED)
     return platform_key_name(u32(key_code))
@@ -371,4 +394,58 @@ input_register :: proc(variant: Event_Variant) {
 input_destroy :: proc() {
     input_update_and_prepare()
     delete(events_this_frame)
+}
+
+input_update_mouse_state :: proc() {
+    update_button_state :: proc(b: Mouse_Button, s: ^Mouse_Button_State) {
+        DOUBLE_CLICK_DISTANCE_TOLERANCE :: 2
+        DOUBLE_CLICK_TIME_TOLERANCE     :: 200
+
+        time_from_last_click := time.duration_milliseconds(
+            time.tick_diff(s.last_clicked_time, previous_frame_time),
+        )
+        time_from_last_double_click := time.duration_milliseconds(
+            time.tick_diff(s.last_double_clicked_time, previous_frame_time),
+        )
+        distance_from_last_click := s.last_clicked_position - mouse_state.position
+        max_distance := max(abs(distance_from_last_click.x), abs(distance_from_last_click.y))
+
+        is_down := platform_mouse_button_down(b)
+        is_dragging := is_down && s.is_down
+        just_clicked := !s.is_down && is_down
+
+        s.is_down = is_down
+        s.is_dragging = is_dragging && mouse_state.position != s.last_clicked_position
+        s.just_clicked = just_clicked
+
+        if just_clicked {
+            last_keystroke = time.tick_now()
+            s.last_clicked_time = previous_frame_time
+            s.last_clicked_position = mouse_state.position
+
+            s.just_double_clicked = time_from_last_click < DOUBLE_CLICK_TIME_TOLERANCE && max_distance < DOUBLE_CLICK_DISTANCE_TOLERANCE
+            s.just_triple_clicked = time_from_last_double_click < DOUBLE_CLICK_TIME_TOLERANCE && max_distance < DOUBLE_CLICK_DISTANCE_TOLERANCE
+
+            if s.just_triple_clicked do s.just_double_clicked = false
+            if s.just_double_clicked do s.last_double_clicked_time = previous_frame_time
+        } else {
+            s.just_double_clicked = false
+            s.just_triple_clicked = false
+        }
+    }
+
+    mx, my := platform_get_mouse_position()
+    mouse_state.position = { i32(mx), i32(my) }
+    mouse_state.has_moved = mouse_state.position != mouse_state.last_position
+    mouse_state.last_position = mouse_state.position
+
+    // resets these values since they may be captured again by platform this frame.
+    mouse_state.scroll_x = 0
+    mouse_state.scroll_y = 0
+
+    if mouse_state.has_moved do platform_toggle_cursor(true)
+
+    update_button_state(.Left,    &mouse_state.left_button  )
+    update_button_state(.Middle,  &mouse_state.middle_button)
+    update_button_state(.Right,   &mouse_state.right_button )
 }

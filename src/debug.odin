@@ -390,6 +390,7 @@ when BRAGI_DEBUG {
             debug.tab_pen.y -= debug.profiler_scroll
             DEBUG_draw_profiler_tab()
         case .Buffer:
+            DEBUG_draw_buffer_tab()
         case .Memory:
             debug.tab_pen.y -= debug.memory_scroll
             DEBUG_draw_memory_tab()
@@ -522,6 +523,36 @@ when BRAGI_DEBUG {
             )
             draw_text(_font_regular, low_frametime_pen, low_frametime_str)
         }
+    }
+
+    DEBUG_draw_buffer_tab :: proc() {
+        mx, my := platform_get_mouse_position()
+        pane_index := -1
+        pane_rect: Rect
+
+        for pane, index in open_panes {
+            left := pane.rect.x
+            right := left + pane.rect.w
+            up := pane.rect.y
+            down := up + pane.rect.h
+
+            if mx >= left && mx <= right && my >= up && my <= down {
+                pane_index = index
+                pane_rect = pane.rect
+                break
+            }
+        }
+
+        mouse_pos_str := fmt.tprintf("Mouse X: {} Y: {}\n", mx, my)
+        pane_pos_at_mouse_str := fmt.tprintf("Pane: I {} Rect {}\n", pane_index, pane_rect)
+        mouse_rel_to_pane := fmt.tprintf(
+            "Relative Mouse X: {} Y: {}\n", mx - pane_rect.x, my - pane_rect.y,
+        )
+
+        set_custom_color(DEBUG_COLOR_FOREGROUND, _font_regular.texture)
+        debug.tab_pen = draw_text(_font_regular, debug.tab_pen, mouse_pos_str)
+        debug.tab_pen = draw_text(_font_regular, debug.tab_pen, pane_pos_at_mouse_str)
+        debug.tab_pen = draw_text(_font_regular, debug.tab_pen, mouse_rel_to_pane)
     }
 
     DEBUG_draw_memory_tab :: proc() {
