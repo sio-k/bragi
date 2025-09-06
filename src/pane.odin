@@ -738,6 +738,10 @@ mouse_pos_to_offset :: proc(pane: ^Pane, relative_mouse_pos: Vector2) -> int {
     Y := relative_mouse_pos.y/pane.font.character_height + i32(pane.y_offset)
     X := max((relative_mouse_pos.x - gutter_size)/pane.font.xadvance, 0) + i32(pane.x_offset)
 
+    if settings.modeline_position == .top {
+        Y = max(Y - 1, 0)
+    }
+
     if len(lines) == 2 {
         coords.row = 0
         coords.column = min(int(X), len(pane.buffer.text)-1)

@@ -50,25 +50,25 @@ Modeline_Position :: enum {
 }
 
 Settings :: struct {
-    editor_font_size:          int,
-    ui_font_size:              int,
+    editor_font_size:                                       int,
+    ui_font_size:                                           int,
 
-    always_wrap_lines:         bool,
-    show_trailing_whitespaces: bool,
-    purge_trailing_whitespaces_on_save: bool,
+    always_wrap_lines:                                      bool,
+    show_trailing_whitespaces:                              bool,
+    purge_trailing_whitespaces_on_save:                     bool,
 
-    cursor_is_a_block:        bool,
-    cursor_width:             int,
-    mouse_scroll_threshold:   int,
-    hide_mouse_while_typing:  bool,
+    cursor_is_a_block:                                      bool,
+    cursor_width:                                           int,
+    mouse_scroll_threshold:                                 int,
+    hide_mouse_while_typing:                                bool,
 
-    default_tab_size:         int,
-    default_tab_character:    Tab_Character,
-    derive_indentation_from_file: bool,
+    default_tab_size:                                       int,
+    default_tab_character:                                  Tab_Character,
+    derive_indentation_from_file:                           bool,
 
-    show_line_numbers:        bool,
-    maximize_window_on_start: bool,
-    modeline_position:        Modeline_Position,
+    show_line_numbers:                                      bool,
+    maximize_window_on_start:                               bool,
+    modeline_position:                                      Modeline_Position,
 }
 
 settings_init :: proc() {
@@ -142,8 +142,8 @@ _settings_setup_basic_bragi_keybindings :: proc() {
     commands_map["ALT-X"] =  .find_command
     commands_map["ALT-F"] =  .find_file
 
-    commands_map["ALT-W"] = .close_current_buffer
-    commands_map["ALT-S"] = .save_buffer
+    commands_map["ALT-W"]       = .close_current_buffer
+    commands_map["ALT-S"]       = .save_buffer
     commands_map["ALT-SHIFT-S"] = .save_buffer_as
 
     commands_map["CTRL-S"]       = .search_forward
@@ -195,7 +195,7 @@ _settings_setup_basic_bragi_keybindings :: proc() {
     commands_map["CTRL-D"]           = .remove_right
     commands_map["CTRL-BACKSPACE"]   = .remove_prev_word
     commands_map["CTRL-DELETE"]      = .remove_next_word
-    commands_map["CTRL-SHIFT-D"]     = .remove_next_word
+    commands_map["ALT-D"]            = .remove_next_word
 
     commands_map["TAB"]              = .indent_or_tab_stop
     commands_map["ENTER"]            = .newline_and_indent
