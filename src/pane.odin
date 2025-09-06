@@ -1068,6 +1068,15 @@ pane_keyboard_event_handler :: proc(event: Event_Keyboard, cmd: Command) -> bool
         return true
     case .cut_line:
         pane_cursor_select_to(pane, .end_of_line)
+
+        // if there's no selection, we add plus one to kill the line.
+        for &cursor in pane.cursors {
+            if !cursor.active do continue
+            if cursor.pos == cursor.sel {
+                cursor.pos = min(cursor.pos + 1, len(pane.buffer.text))
+            }
+        }
+
         pane_copy_selected_text(pane, true)
         pane_remove_selections(pane)
         return true
