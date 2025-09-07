@@ -1712,21 +1712,42 @@ _indent_single_line :: proc(buffer: ^Buffer, text: string, line_index: int, line
     }
 
     curr_line_start, curr_line_end := get_line_boundaries(line_index, lines)
+    prev_line_start, prev_line_end := get_line_boundaries(line_index - 1, lines)
     indent_chars_in_curr_line := count_indent_chars(text[curr_line_start:curr_line_end])
 
-    prev_line_start, prev_line_end := get_line_boundaries(line_index - 1, lines)
-    prev_line_tokens := get_indentation_tokens(buffer, text[prev_line_start:prev_line_end])
     curr_line_tokens := get_indentation_tokens(buffer, text[curr_line_start:curr_line_end])
+    prev_line_tokens := get_indentation_tokens(buffer, text[prev_line_start:prev_line_end])
+    first_curr_token := curr_line_tokens[0]
+    first_prev_token := prev_line_tokens[0]
+    last_prev_token := prev_line_tokens[len(prev_line_tokens)-1]
+
     delta := _calculate_indent_delta(prev_line_tokens)
 
     // the start of the previous line was a closing token
-    if len(prev_line_tokens) > 0 && prev_line_tokens[0].action == .Close {
+    if first_prev_token.action == .Close {
         delta += 1
     }
 
     // the start of this line is a closing token
-    if len(curr_line_tokens) > 0 && curr_line_tokens[0].action == .Close {
+    if first_curr_token.action == .Close {
         delta -= 1
+    }
+
+    // if we're not at the top of the buffer, we do some extra checks
+    if line_index - 2 > 0 {
+        prev2_line_start, prev2_line_end := get_line_boundaries(line_index - 2, lines)
+        prev2_line_tokens := get_indentation_tokens(buffer, text[prev2_line_start:prev2_line_end])
+        last_prev2_token := prev2_line_tokens[len(prev2_line_tokens)-1]
+
+        // last line ended in a line continuation token (i.e. in some languages it would be &&)
+        if last_prev_token.action == .Line_Continuation && last_prev2_token.action != .Line_Continuation {
+            delta += 1
+        }
+
+        // if previously we had a line continuation, but last line broke the chain
+        if last_prev_token.action != .Line_Continuation && last_prev2_token.action == .Line_Continuation {
+            delta -= 1
+        }
     }
 
     indent_chars_wanted = _calculate_new_indent(buffer, indent_chars_wanted, delta)
@@ -1822,9 +1843,10 @@ _calculate_indent_delta :: proc(tokens: []Indentation_Token) -> (delta: int) {
     // token, so for now we'll follow the same approach.
     for token in tokens {
         switch token.action {
-        case .None: // do nothi
-        case .Close: delta -= 1
-        case .Open:  delta += 1
+        case .None:              // nothing
+        case .Close:             delta -= 1
+        case .Open:              delta += 1
+        case .Line_Continuation: // nothing, should be handled manually
         }
     }
     return

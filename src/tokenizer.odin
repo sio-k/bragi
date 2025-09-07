@@ -68,8 +68,12 @@ Indentation_Token :: struct {
         None, // ensure we at least register one token
         Close,
         Open,
+        // tokens that will make the line continue in the next line
+        // and want some indentation, but that indentation not to carry over.
+        Line_Continuation,
     },
     kind: enum u8 {
+        Unimportant, // just a default
         Brace,
         Bracket,
         Paren,

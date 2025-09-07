@@ -72,6 +72,15 @@ tokenize_odin_indentation :: proc(buffer: ^Buffer, text: string) -> []Indentatio
         // TODO(nawe) handle the raw string and the comment multiline
         // that shouldn't really start with indentation.
         #partial switch token.kind {
+        case .EOF:
+            p0, _, _ := get_previous_tokens(&tokenizer)
+            if p0.kind == .Operation {
+                if operation, is_operation := p0.variant.(Operation); is_operation {
+                    if operation == .Pipe_Pipe || operation == .Ampersand_Ampersand {
+                        indent.action = .Line_Continuation
+                    }
+                }
+            }
         case .Keyword:
             if token.text == "case" {
                 indent.action = .Close
