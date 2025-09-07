@@ -1133,18 +1133,19 @@ pane_toggle_line_wrappings :: proc(pane: ^Pane) {
 }
 
 pane_clone_cursor_to :: proc(pane: ^Pane, t: Translation) {
+    sort_cursors_by_offset(pane)
+
     if len(pane.cursors) == 1 {
         cloned_cursor := cursor_clone(pane, pane.cursors[0])
         pane_cursor_move_to(pane, t, cloned_cursor)
     } else if !are_all_cursors_active(pane) {
         cursor_to_clone := get_first_active_cursor(pane)
-        cloned_cursor := cursor_clone(pane, cursor_to_clone^)
-        pane_cursor_move_to(pane, t, cloned_cursor)
         cursor_to_clone.active = false
+        cloned_cursor := cursor_clone(pane, cursor_to_clone^)
         cloned_cursor.active = true
+        pane_cursor_move_to(pane, t, cloned_cursor)
     } else {
         pane_toggle_selection(pane, true)
-        sort_cursors_by_offset(pane)
 
         cloned_cursor: ^Cursor
 
@@ -1157,7 +1158,6 @@ pane_clone_cursor_to :: proc(pane: ^Pane, t: Translation) {
         pane_cursor_move_to(pane, t, cloned_cursor)
     }
 
-    sort_cursors_by_offset(pane)
     pane.cursor_moved = true
 }
 
