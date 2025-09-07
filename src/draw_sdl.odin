@@ -55,31 +55,35 @@ draw_texture :: #force_inline proc(texture: ^Texture, src, dest: ^Rect, loc := #
     }
 }
 
-set_color :: #force_inline proc(face: Face_Color, texture: ^Texture = nil) {
+set_color :: #force_inline proc(face: Face_Color, font: ^Font = nil) {
     c := colorscheme[face]
-    if texture == nil {
+    if font == nil {
         sdl.SetRenderDrawColor(renderer, c.r, c.g, c.b, c.a)
     } else {
-        sdl.SetTextureColorMod(texture, c.r, c.g, c.b)
+        for t in font.textures {
+            sdl.SetTextureColorMod(t, c.r, c.g, c.b)
+        }
     }
 }
 
-set_colors :: #force_inline proc(face: Face_Color, textures: []^Texture) {
-    for t in textures do set_color(face, t)
+set_colors :: #force_inline proc(face: Face_Color, fonts: []^Font) {
+    for f in fonts do set_color(face, f)
 }
 
-set_custom_color :: proc(color: int, texture: ^Texture = nil) {
+set_custom_color :: proc(color: int, font: ^Font = nil) {
     c := hex_to_color(color)
 
-    if texture == nil {
+    if font == nil {
         sdl.SetRenderDrawColor(renderer, c.r, c.g, c.b, c.a)
     } else {
-        sdl.SetTextureColorMod(texture, c.r, c.g, c.b)
-        sdl.SetTextureAlphaMod(texture, c.a)
+        for t in font.textures {
+            sdl.SetTextureColorMod(t, c.r, c.g, c.b)
+            sdl.SetTextureAlphaMod(t, c.a)
+        }
     }
 }
 
-set_color_from_token :: #force_inline proc(kind: Token_Kind, texture: ^Texture) {
+set_color_from_token :: #force_inline proc(kind: Token_Kind, font: ^Font) {
     c: Color
 
     #partial switch kind {
@@ -96,7 +100,9 @@ set_color_from_token :: #force_inline proc(kind: Token_Kind, texture: ^Texture) 
         case:                                      c = colorscheme[.foreground]
     }
 
-    sdl.SetTextureColorMod(texture, c.r, c.g, c.b)
+    for t in font.textures {
+        sdl.SetTextureColorMod(t, c.r, c.g, c.b)
+    }
 }
 
 set_transparency :: #force_inline proc(texture: ^Texture, value: f32) {
@@ -139,14 +145,14 @@ draw_code :: proc(pane: ^Pane, font: ^Font, pen: Vector2, code_lines: []Code_Lin
             }
 
             if hl.foreground != .undefined {
-                set_color(hl.foreground, font.texture)
+                set_color(hl.foreground, font)
             } else if len(code.tokens) > 0 {
-                set_color_from_token(code.tokens[x_offset], font.texture)
+                set_color_from_token(code.tokens[x_offset], font)
             } else {
-                set_color(.foreground, font.texture)
+                set_color(.foreground, font)
             }
 
-            draw_texture(font.texture, &src, &dest)
+            draw_texture(font.textures[glyph.bucket_index], &src, &dest)
             sx += glyph.xadvance
             ends_with_whitespace = r == ' ' || r == '\t'
         }
@@ -219,8 +225,8 @@ draw_cursor :: proc(font: ^Font, pen: Vector2, rune_behind: rune, visible, fille
                 glyph := find_or_create_glyph(font, rune_behind)
                 src := make_rect(glyph.x, glyph.y, glyph.w, glyph.h)
                 dest := make_rect(pen.x, pen.y, glyph.w, glyph.h)
-                set_color(.background, font.texture)
-                draw_texture(font.texture, &src, &dest)
+                set_color(.background, font)
+                draw_texture(font.textures[glyph.bucket_index], &src, &dest)
             }
         }
     } else {
@@ -241,7 +247,7 @@ draw_gutter :: proc(pane: ^Pane) {
         count := utf8.rune_count_in_string(text)
         visible_columns := get_pane_visible_columns(pane)
 
-        set_color(.ui_line_number_foreground_current, font.texture)
+        set_color(.ui_line_number_foreground_current, font)
         if pane.x_offset > 0 {
             draw_text(font, pen, left_indicator)
         }
@@ -293,9 +299,9 @@ draw_gutter :: proc(pane: ^Pane) {
                 if slice.contains(current_rows[:], line_number) {
                     set_color(.ui_line_number_background_current)
                     draw_rect(0, visual_pen.y, gutter_size, line_size * regular_character_height)
-                    set_color(.ui_line_number_foreground_current, font.texture)
+                    set_color(.ui_line_number_foreground_current, font)
                 } else {
-                    set_color(.ui_line_number_foreground, font.texture)
+                    set_color(.ui_line_number_foreground, font)
                 }
 
                 line_number_str := strings.right_justify(
@@ -379,9 +385,9 @@ draw_modeline :: proc(pane: ^Pane) {
     draw_rect(0, modeline_y_pos, modeline_width, modeline_height)
 
     if modified {
-        set_colors(modeline_highlight, {font_regular.texture, font_bold.texture})
+        set_colors(modeline_highlight, {font_regular, font_bold})
     } else {
-        set_colors(modeline_foreground, {font_regular.texture, font_bold.texture})
+        set_colors(modeline_foreground, {font_regular, font_bold})
     }
 
     status_str := fmt.tprintf(
@@ -392,11 +398,11 @@ draw_modeline :: proc(pane: ^Pane) {
     left_pen = draw_text(font_bold, left_pen, pane.buffer.name)
 
     if is_crlf(pane.buffer) {
-        set_color(modeline_highlight, font_italic.texture)
+        set_color(modeline_highlight, font_italic)
         left_pen = draw_text(font_italic, left_pen, " [CRLF replaced with LF] ")
     }
 
-    set_color(modeline_foreground, font_regular.texture)
+    set_color(modeline_foreground, font_regular)
     if len(pane.cursors) == 1 {
         // using the buffer lines for these coords, we want to know the real position of the cursor
         coords := cursor_offset_to_coords(pane, pane.buffer.line_starts[:], pane.cursors[0].pos)
@@ -415,7 +421,7 @@ draw_modeline :: proc(pane: ^Pane) {
             indent_str = fmt.tprintf("Space({})  ", pane.buffer.indent.tab_size)
         }
 
-        set_colors(modeline_foreground, {font_regular.texture, font_bold.texture})
+        set_colors(modeline_foreground, {font_regular, font_bold})
         major_mode_str := get_major_mode_name(pane.buffer)
         right_side_width := i32(len(indent_str) + len(major_mode_str) + 1) * font_bold.em_width
         right_pen.x -= right_side_width
@@ -481,18 +487,18 @@ draw_highlighted_text :: proc(
             continue
         }
 
-        set_color(face, font.texture)
+        set_color(face, font)
         glyph := find_or_create_glyph(font, r)
 
         if highlighted && !selected {
             set_color(highlight_bg_face)
             draw_rect(sx, sy, font.em_width, font.character_height)
-            set_color(highlight_fg_face, font.texture)
+            set_color(highlight_fg_face, font)
         }
 
         src := make_rect(glyph.x, glyph.y, glyph.w, glyph.h)
         dest := make_rect(sx, sy, glyph.w, glyph.h)
-        draw_texture(font.texture, &src, &dest)
+        draw_texture(font.textures[glyph.bucket_index], &src, &dest)
         sx += glyph.xadvance
     }
 
@@ -512,7 +518,7 @@ draw_text_line :: proc(font: ^Font, pen: Vector2, text: string, selection: Range
             draw_rect(sx, sy, font.em_width, font.character_height, true)
         }
 
-        draw_texture(font.texture, &src, &dest)
+        draw_texture(font.textures[glyph.bucket_index], &src, &dest)
         sx += glyph.xadvance
     }
 
@@ -541,7 +547,7 @@ draw_text :: proc(font: ^Font, pen: Vector2, text: string) -> (pen2: Vector2) {
         glyph := find_or_create_glyph(font, r)
         src := make_rect(glyph.x, glyph.y, glyph.w, glyph.h)
         dest := make_rect(sx, sy, glyph.w, glyph.h)
-        draw_texture(font.texture, &src, &dest)
+        draw_texture(font.textures[glyph.bucket_index], &src, &dest)
         sx += glyph.xadvance
     }
 

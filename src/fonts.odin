@@ -17,17 +17,20 @@ Font_Face :: enum {
     Icons,
 }
 
+Font_Texture_Bucket :: distinct [dynamic]^Texture
+
 Glyph_Data :: struct {
-    x, y:     i32,
-    w, h:     i32,
-    xadvance: i32,
+    x, y:         i32,
+    w, h:         i32,
+    xadvance:     i32,
+    bucket_index: int,
 }
 
 Font :: struct {
     name:                    string,
     face:                    ^ttf.Font,
     glyphs_map:              map[rune]^Glyph_Data,
-    texture:                 ^Texture,
+    textures:                Font_Texture_Bucket,
     last_packed_glyph:       ^Glyph_Data,
 
     em_width:                i32,
@@ -44,6 +47,8 @@ Font :: struct {
 MAXIMUM_FONT_SIZE :: 110
 MINIMUM_FONT_SIZE :: 14
 MAX_SAFE_GLYPHS   :: 300
+TEXTURE_WIDTH     :: 128
+TEXTURE_HEIGHT    :: 128
 
 CHAR_PADDING :: 1
 
@@ -69,6 +74,11 @@ fonts_destroy :: proc() {
         for _, glyph in font.glyphs_map {
             free(glyph)
         }
+
+        for t in font.textures {
+            sdl.DestroyTexture(t)
+        }
+        delete(font.textures)
 
         delete(font.name)
         delete(font.glyphs_map)
@@ -152,7 +162,7 @@ get_font_with_size :: proc(name: string, data: []byte, character_height: f32) ->
         result.character_height = result.max_ascender - result.max_descender
     }
 
-    result.texture = texture_create(.STREAMING, i32(character_height*10), i32(character_height*10))
+    append(&result.textures, texture_create(.STREAMING, TEXTURE_WIDTH, TEXTURE_HEIGHT))
 
     minx, maxx, xadvance: i32
     _ = ttf.GetGlyphMetrics(result.face, u32('M'), &minx, &maxx, nil, nil, &xadvance)
@@ -197,23 +207,27 @@ find_or_create_glyph :: proc(font: ^Font, r: rune) -> ^Glyph_Data {
     }
 
     result := new(Glyph_Data)
-
-    surface := sdl.CreateSurface(font.texture.w, font.texture.h, .RGBA32)
-    sdl.SetSurfaceColorKey(surface, true, sdl.MapSurfaceRGBA(surface, 0, 0, 0, 0))
-
-    sdl.LockTextureToSurface(font.texture, nil, &surface)
+    result.bucket_index = len(font.textures)-1
 
     str_from_rune := utf8.runes_to_string([]rune{r}, context.temp_allocator)
     cstr := cstring(raw_data(str_from_rune))
 
-    if x + width + CHAR_PADDING >= font.texture.w {
+    if x + width + CHAR_PADDING >= TEXTURE_WIDTH {
         x = 0
         y += height + CHAR_PADDING
 
-        if y + height >= font.texture.h {
-            log.fatalf("there's no space in texture to store rune '{}'", r)
+        if y + height >= TEXTURE_HEIGHT {
+            x = 0
+            y = 0
+            result.bucket_index += 1
+            append(&font.textures, texture_create(.STREAMING, TEXTURE_WIDTH, TEXTURE_HEIGHT))
         }
     }
+
+    surface := sdl.CreateSurface(TEXTURE_WIDTH, TEXTURE_HEIGHT, .RGBA32)
+    sdl.SetSurfaceColorKey(surface, true, sdl.MapSurfaceRGBA(surface, 0, 0, 0, 0))
+
+    sdl.LockTextureToSurface(font.textures[result.bucket_index], nil, &surface)
 
     rect := sdl.Rect{x, y, width, height}
 
@@ -228,7 +242,7 @@ find_or_create_glyph :: proc(font: ^Font, r: rune) -> ^Glyph_Data {
     result.w = rect.w
     result.h = rect.h
 
-    sdl.UnlockTexture(font.texture)
+    sdl.UnlockTexture(font.textures[result.bucket_index])
 
     font.glyphs_map[r] = result
     font.last_packed_glyph = result

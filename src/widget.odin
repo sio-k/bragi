@@ -1003,19 +1003,19 @@ update_and_draw_widget :: proc() {
         case .Search_In_Buffer:
         }
 
-        set_colors(.highlight, {font_bold.texture, font_regular.texture})
+        set_colors(.highlight, {font_bold, font_regular})
         prompt_pen := draw_text(font_bold, {left_padding, 0}, question)
         draw_text(font_regular, prompt_pen, "<ENTER>")
     } else {
         if cursor.index == -1 {
             set_color(.ui_selection_background)
             draw_rect(0, 0, i32(len(prompt_ask_str)) * font_bold.xadvance, line_height, true)
-            set_color(.ui_selection_foreground, font_bold.texture)
+            set_color(.ui_selection_foreground, font_bold)
         } else {
-            set_color(.highlight, font_bold.texture)
+            set_color(.highlight, font_bold)
         }
 
-        set_color(.foreground, font_regular.texture)
+        set_color(.foreground, font_regular)
         prompt_ask_pen := draw_text(font_bold, {left_padding, 0}, prompt_ask_str)
         draw_text_line(font_regular, prompt_ask_pen, prompt_query_str, {start = cursor.pos, end = cursor.sel})
 
