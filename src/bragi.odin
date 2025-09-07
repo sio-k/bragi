@@ -268,8 +268,7 @@ main :: proc() {
         prepare_for_drawing()
 
         update_opened_buffers()
-        update_active_pane()
-        draw_panes()
+        update_and_draw_panes()
         update_and_draw_widget()
         DEBUG_draw()
         draw_frame()

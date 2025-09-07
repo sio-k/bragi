@@ -91,6 +91,7 @@ desktop_init :: proc() {
         new_pane := pane_create()
 
         new_pane.local_font_size = f32(pane_info.font_size)
+        new_pane.cursor_moved = true
 
         if pane_info.buffer_filepath != "" {
             for buffer in open_buffers {

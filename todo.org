@@ -24,6 +24,8 @@ Improvement/Prev-Forward Word: should use smarter delimiters
 
 Improvement/Desktop File: add versioning
 
+Improvement/When the panes are looking at the same buffer, the inactive pane's cursor should not move if there's text being entered before that cursor. Maybe we need to update the offsets accordingly for all panes in case this happens?
+
 Feature/Mouse: add mouse support to pane/edit
 
 Feature/Marks: save pane/buffer marks for some user actions. Show the existing marks on the pane fringe

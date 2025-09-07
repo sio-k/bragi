@@ -114,49 +114,45 @@ pane_destroy :: proc(pane: ^Pane) {
     free(pane)
 }
 
-update_active_pane :: proc() {
+update_and_draw_panes :: proc() {
+    profiling_start("update and draw all panes")
     should_cursor_blink :: proc(pane: ^Pane) -> bool {
         return pane.cursor_blink_count < CURSOR_BLINK_MAX_COUNT &&
             time.tick_diff(pane.cursor_blink_timer, time.tick_now()) > CURSOR_BLINK_TIMEOUT
     }
-    profiling_start("active_pane")
-    pane := active_pane
-
-    if time.tick_diff(last_keystroke, time.tick_now()) < CURSOR_RESET_TIMEOUT {
-        pane.cursor_showing = true
-        pane.cursor_blink_count = 0
-        pane.cursor_blink_timer = time.tick_now()
-        flag_pane(pane, {.Need_Full_Repaint})
-    }
-
-    if should_cursor_blink(pane) {
-        pane.cursor_showing = !pane.cursor_showing
-        pane.cursor_blink_count += 1
-        pane.cursor_blink_timer = time.tick_now()
-
-        if pane.cursor_blink_count >= CURSOR_BLINK_MAX_COUNT {
-            pane.cursor_showing = true
-        }
-
-        flag_pane(pane, {.Need_Full_Repaint})
-    }
-
-    if pane.cursor_moved {
-        pane.cursor_moved = false
-        maybe_scroll_pane_to_cursor_view(pane)
-        flag_pane(pane, {.Need_Full_Repaint})
-    }
-
-    profiling_end()
-}
-
-draw_panes :: proc() {
-    profiling_start("draw all panes")
 
     for pane in open_panes {
         assert(pane.buffer != nil)
         assert(pane.texture != nil)
         assert(len(pane.cursors) > 0)
+        is_active_pane := pane.uuid == active_pane.uuid
+
+        if is_active_pane {
+            if time.tick_diff(last_keystroke, time.tick_now()) < CURSOR_RESET_TIMEOUT {
+                pane.cursor_showing = true
+                pane.cursor_blink_count = 0
+                pane.cursor_blink_timer = time.tick_now()
+                flag_pane(pane, {.Need_Full_Repaint})
+            }
+
+            if should_cursor_blink(pane) {
+                pane.cursor_showing = !pane.cursor_showing
+                pane.cursor_blink_count += 1
+                pane.cursor_blink_timer = time.tick_now()
+
+                if pane.cursor_blink_count >= CURSOR_BLINK_MAX_COUNT {
+                    pane.cursor_showing = true
+                }
+
+                flag_pane(pane, {.Need_Full_Repaint})
+            }
+        }
+
+        if pane.cursor_moved {
+            pane.cursor_moved = false
+            maybe_scroll_pane_to_cursor_view(pane)
+            flag_pane(pane, {.Need_Full_Repaint})
+        }
 
         if .Need_Full_Repaint not_in pane.flags {
             draw_texture(pane.texture, nil, &pane.rect)
@@ -593,7 +589,6 @@ switch_to_buffer :: proc(pane: ^Pane, buffer: ^Buffer) {
     profiling_start("switching buffers in pane")
     assert(buffer != nil)
     clear(&pane.regions)
-    if pane.buffer != nil do copy_cursors(pane, pane.buffer)
 
     if len(buffer.cursors) > 0 {
         delete(pane.cursors)
@@ -837,16 +832,26 @@ pane_keyboard_event_handler :: proc(event: Event_Keyboard, cmd: Command) -> bool
         flag_pane(active_pane, {.Need_Full_Repaint})
         return true
     case .close_current_buffer:
+        for &other in open_panes {
+            if other.buffer.uuid == buffer.uuid do other.buffer = nil
+        }
+
         index := buffer_index(buffer)
         ordered_remove(&open_buffers, index)
         buffer_destroy(buffer)
-        active_pane.buffer = nil
+
+        new_buffer: ^Buffer
         if len(open_buffers) == 0 {
-            switch_to_buffer(active_pane, buffer_get_or_create_empty())
+            new_buffer = buffer_get_or_create_empty()
         } else {
             index = clamp(index, 0, len(open_buffers) - 1)
-            switch_to_buffer(active_pane, open_buffers[index])
+            new_buffer = open_buffers[index]
         }
+
+        for other in open_panes {
+            if other.buffer == nil do switch_to_buffer(other, new_buffer)
+        }
+
         return true
     case .save_buffer:
         if buffer.filepath == "" {
