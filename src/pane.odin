@@ -696,11 +696,8 @@ pane_handle_mouse_events :: proc() {
     }
 
     if mouse_state.left_button.is_dragging {
-        set_pane_at_mouse_pos_as_active()
+        // we don't change panes while dragging
         pane := active_pane
-
-        if len(pane.buffer.text) == 0 do return
-
         cursor := get_first_active_cursor(pane)
         current := mouse_state.position
         curr_mpos := Vector2{current.x - i32(pane.rect.x), current.y - i32(pane.rect.y)}
@@ -1519,9 +1516,15 @@ translate_position :: proc(pane: ^Pane, pos: int, t: Translation, max_column := 
         return b == ' ' || b == '\n' || b == '\t'
     }
 
+    is_alphanumeric :: proc(b: byte) -> bool {
+        return b >= 'a' && b <= 'z' || b >= 'A' && b <= 'Z' || b >= '0' && b <= '9'
+    }
+
+    // TODO(nawe) this really needs to improve...
     is_word_delim :: proc(b: byte) -> bool {
-        return is_space(b) || b == '_' || b == '-' || b == '{' || b == '}' ||
-            b == '(' || b == ')' || b == '.'
+        return is_space(b) || b == '_' || b == '-' || b == '{' || b == '}' || b == '(' ||
+            b == ')' || b == '.' || b == '[' || b == ']' || b == ',' || b == '/' ||
+            b == '\\' || b == '"'
     }
 
     buf := pane.buffer.text
