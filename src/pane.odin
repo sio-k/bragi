@@ -144,6 +144,7 @@ update_active_pane :: proc() {
     if pane.cursor_moved {
         pane.cursor_moved = false
         maybe_scroll_pane_to_cursor_view(pane)
+        flag_pane(pane, {.Need_Full_Repaint})
     }
 
     profiling_end()
@@ -622,32 +623,25 @@ maybe_scroll_pane_to_cursor_view :: proc(pane: ^Pane) {
 
     active_cursor := get_first_active_cursor(pane)
     coords := cursor_offset_to_coords(pane, lines, active_cursor.pos)
-    has_scrolled := false
     visible_columns := get_pane_visible_columns(pane)
 
     if .Line_Wrappings not_in pane.flags {
         for coords.column < pane.x_offset {
             pane.x_offset -= 1
-            has_scrolled = true
         }
 
         for coords.column >= visible_columns + pane.x_offset {
             pane.x_offset += 1
-            has_scrolled = true
         }
     }
 
     for coords.row < pane.y_offset {
         pane.y_offset -= 1
-        has_scrolled = true
     }
 
     for coords.row >= visible_rows + pane.y_offset {
         pane.y_offset += 1
-        has_scrolled = true
     }
-
-    if has_scrolled do flag_pane(pane, {.Need_Full_Repaint})
 }
 
 pane_handle_mouse_events :: proc() {
@@ -703,6 +697,7 @@ pane_handle_mouse_events :: proc() {
         curr_mpos := Vector2{current.x - i32(pane.rect.x), current.y - i32(pane.rect.y)}
         pos_offset := mouse_pos_to_offset(pane, curr_mpos)
         cursor.pos = pos_offset
+        pane.cursor_moved = true
     } else if mouse_state.left_button.just_clicked {
         set_pane_at_mouse_pos_as_active()
         pane := active_pane
