@@ -528,13 +528,13 @@ when BRAGI_DEBUG {
     DEBUG_draw_buffer_tab :: proc() {
         mx, my := platform_get_mouse_position()
         pane_index := -1
-        pane_rect: Rect
+        pane_rect: IRect
 
         for pane, index in open_panes {
-            left := pane.rect.x
-            right := left + pane.rect.w
-            up := pane.rect.y
-            down := up + pane.rect.h
+            left := f32(pane.rect.x)
+            right := left + f32(pane.rect.w)
+            up := f32(pane.rect.y)
+            down := up + f32(pane.rect.h)
 
             if mx >= left && mx <= right && my >= up && my <= down {
                 pane_index = index
@@ -546,7 +546,7 @@ when BRAGI_DEBUG {
         mouse_pos_str := fmt.tprintf("Mouse X: {} Y: {}\n", mx, my)
         pane_pos_at_mouse_str := fmt.tprintf("Pane: I {} Rect {}\n", pane_index, pane_rect)
         mouse_rel_to_pane := fmt.tprintf(
-            "Relative Mouse X: {} Y: {}\n", mx - pane_rect.x, my - pane_rect.y,
+            "Relative Mouse X: {} Y: {}\n", mx - f32(pane_rect.x), my - f32(pane_rect.y),
         )
 
         set_custom_color(DEBUG_COLOR_FOREGROUND, _font_regular)

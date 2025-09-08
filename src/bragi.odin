@@ -126,7 +126,6 @@ main :: proc() {
     previous_frame_time = time.tick_now()
 
     for bragi_running {
-
         profiling_start("parsing events")
 
         input_update_mouse_state()
@@ -253,7 +252,7 @@ main :: proc() {
                     }
 
                     log.debug("updating necessary textures after resizing")
-                    update_all_pane_textures()
+                    update_pane_layout()
                     update_widget_texture()
                 }
 

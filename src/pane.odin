@@ -49,8 +49,7 @@ Pane :: struct {
     flags:               Pane_Flags,
 
     // rendering stuff
-    rect:                Rect,
-    texture:             ^Texture,
+    rect:                IRect,
     x_offset:            int,
     y_offset:            int,
 }
@@ -102,7 +101,7 @@ pane_create :: proc(pane: ^Pane = nil) -> ^Pane {
     }
 
     append(&open_panes, result)
-    update_all_pane_textures()
+    update_pane_layout()
     return result
 }
 
@@ -123,7 +122,6 @@ update_and_draw_panes :: proc() {
 
     for pane in open_panes {
         assert(pane.buffer != nil)
-        assert(pane.texture != nil)
         assert(len(pane.cursors) > 0)
 
         if pane.cursor_moved {
@@ -151,14 +149,7 @@ update_and_draw_panes :: proc() {
             flag_pane(pane, {.Need_Full_Repaint})
         }
 
-        if .Need_Full_Repaint not_in pane.flags {
-            draw_texture(pane.texture, nil, &pane.rect)
-            continue
-        }
-
-        set_target(pane.texture)
-        set_color(.background)
-        prepare_for_drawing()
+        set_scissors(&pane.rect)
 
         visible_rows := get_pane_visible_rows(pane)
         size_of_gutter := get_gutter_size(pane)
@@ -221,25 +212,20 @@ update_and_draw_panes :: proc() {
         draw_gutter(pane)
         draw_modeline(pane)
 
-        set_target()
-        draw_texture(pane.texture, nil, &pane.rect)
+        set_scissors()
         unflag_pane(pane, {.Need_Full_Repaint})
     }
     profiling_end()
 }
 
-update_all_pane_textures :: proc() {
-    // should be safe to clean up textures here since we're probably
-    // recreating them due to the change in size
-    pane_width := window_width / i32(len(open_panes))
+update_pane_layout :: proc() {
+    pane_width  := window_width / i32(len(open_panes))
     pane_height := window_height
 
     for &pane, index in open_panes {
         update_pane_font(pane)
-        texture_destroy(pane.texture)
 
-        pane.rect = make_rect(pane_width * i32(index), 0, pane_width, pane_height)
-        pane.texture = texture_create(.TARGET, i32(pane_width), i32(pane_height))
+        pane.rect = {pane_width * i32(index), 0, pane_width, pane_height}
         if .Line_Wrappings in pane.flags do recalculate_line_wrappings(pane)
         flag_pane(pane, {.Need_Full_Repaint})
     }
@@ -571,8 +557,8 @@ get_pane_visible_columns :: proc(pane: ^Pane) -> (result: int) {
 get_pane_visible_rows :: proc(pane: ^Pane) -> (result: int) {
     profiling_start("get_pane_visible_rows")
     pane_height := pane.rect.h
-    font_height := f32(pane.font.character_height)
-    modeline_height := f32(get_modeline_height())
+    font_height := pane.font.character_height
+    modeline_height := get_modeline_height()
     result = int((pane_height - modeline_height)/font_height)
     return result
 }
@@ -793,7 +779,7 @@ pane_keyboard_event_handler :: proc(event: Event_Keyboard, cmd: Command) -> bool
         active_pane = open_panes[new_pane_index]
         ordered_remove(&open_panes, pane_index_to_close)
         pane_destroy(old_pane)
-        update_all_pane_textures()
+        update_pane_layout()
         return true
     case .close_other_panes:
         if len(open_panes) == 1 do return true
@@ -812,7 +798,7 @@ pane_keyboard_event_handler :: proc(event: Event_Keyboard, cmd: Command) -> bool
                 }
             }
         }
-        update_all_pane_textures()
+        update_pane_layout()
         flag_buffer(pane.buffer, {.Dirty})
         return true
     case .new_pane_to_the_right:
@@ -873,14 +859,14 @@ pane_keyboard_event_handler :: proc(event: Event_Keyboard, cmd: Command) -> bool
         new_font_size := pane.local_font_size * 1.25
         if new_font_size < MAXIMUM_FONT_SIZE {
             pane.local_font_size = new_font_size
-            update_all_pane_textures()
+            update_pane_layout()
         }
         return true
     case .decrease_font_size:
         new_font_size := pane.local_font_size * 0.8
         if new_font_size > MINIMUM_FONT_SIZE {
             pane.local_font_size = new_font_size
-            update_all_pane_textures()
+            update_pane_layout()
         }
         return true
     case .reset_font_size:
@@ -888,7 +874,7 @@ pane_keyboard_event_handler :: proc(event: Event_Keyboard, cmd: Command) -> bool
 
         if pane.local_font_size != default_font_size {
             pane.local_font_size = default_font_size
-            update_all_pane_textures()
+            update_pane_layout()
         }
         return true
 
@@ -1047,6 +1033,7 @@ pane_keyboard_event_handler :: proc(event: Event_Keyboard, cmd: Command) -> bool
         buffer.pieces = slice.clone_to_dynamic(pieces)
         make_sure_pieces_have_lines(buffer)
         pane_toggle_selection(pane, true)
+        pane.cursor_moved = true
         profiling_end()
         return true
     case .redo:
@@ -1065,6 +1052,7 @@ pane_keyboard_event_handler :: proc(event: Event_Keyboard, cmd: Command) -> bool
         buffer.pieces = slice.clone_to_dynamic(pieces)
         make_sure_pieces_have_lines(buffer)
         pane_toggle_selection(pane, true)
+        pane.cursor_moved = true
         profiling_end()
         return true
 

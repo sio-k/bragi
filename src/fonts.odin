@@ -33,6 +33,7 @@ Font :: struct {
     textures:                Font_Texture_Bucket,
     last_packed_glyph:       ^Glyph_Data,
 
+    base_height:             f32, // the height that was used when requesting the font
     em_width:                i32,
     character_height:        i32,
     max_ascender:            i32,
@@ -131,7 +132,7 @@ get_font_with_size :: proc(name: string, data: []byte, character_height: f32) ->
     ensure_fonts_are_initialized()
 
     for font in fonts_cache {
-        if font.character_height != i32(character_height) do continue
+        if font.base_height != character_height do continue
         if font.name != name do continue
         return font
     }
@@ -149,6 +150,7 @@ get_font_with_size :: proc(name: string, data: []byte, character_height: f32) ->
     result.name = strings.clone(name)
     result.face = face
     result.replacement_character = 0xFFFD
+    result.base_height = character_height
 
     result.character_height = ttf.GetFontHeight(result.face)
     result.max_ascender     = ttf.GetFontAscent(result.face)

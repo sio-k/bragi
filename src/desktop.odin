@@ -114,7 +114,7 @@ desktop_init :: proc() {
     delete(info.buffers_to_open)
     delete(info.panes_to_open)
     active_pane = open_panes[info.active_pane_index]
-    update_all_pane_textures()
+    update_pane_layout()
 }
 
 @(private)

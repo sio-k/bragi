@@ -8,6 +8,7 @@ import     "core:unicode/utf8"
 
 import sdl "vendor:sdl3"
 
+IRect   :: sdl.Rect
 Rect    :: sdl.FRect
 Surface :: sdl.Surface
 Texture :: sdl.Texture
@@ -111,6 +112,10 @@ set_transparency :: #force_inline proc(texture: ^Texture, value: f32) {
 
 set_target :: #force_inline proc(target: ^Texture = nil) {
     sdl.SetRenderTarget(renderer, target)
+}
+
+set_scissors :: #force_inline proc(rect: ^IRect = nil) {
+    sdl.SetRenderViewport(renderer, rect)
 }
 
 draw_code :: proc(pane: ^Pane, font: ^Font, pen: Vector2, code_lines: []Code_Line, highlights: []Highlight = {}) {
