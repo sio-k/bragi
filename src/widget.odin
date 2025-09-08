@@ -384,30 +384,29 @@ find_buffer_keyboard_event_handler :: proc(event: Event_Keyboard, cmd: Command) 
     cursor := &global_widget.cursor
 
     #partial switch event.key_code {
-        case .K_ENTER, .K_TAB: {
-            if cursor.index > -1 {
-                result := global_widget.view_results[cursor.index]
-                buffer := result.value.(^Buffer)
-                switch_to_buffer(active_pane, buffer)
-                widget_close()
-                return true
-            } else {
-                if event.key_code == .K_TAB do return true
-                if len(global_widget.prompt.buf) == 0 {
-                    // TODO(nawe) proper visual error handling here
-                    log.error("can't submit buffer selection without a buffer name")
-                    return true
-                }
-                buffer := buffer_get_or_create_empty(strings.to_string(global_widget.prompt))
-                switch_to_buffer(active_pane, buffer)
-                widget_close()
+    case .K_ENTER, .K_TAB:
+        if cursor.index > -1 {
+            result := global_widget.view_results[cursor.index]
+            buffer := result.value.(^Buffer)
+            switch_to_buffer(active_pane, buffer)
+            widget_close()
+            return true
+        } else {
+            if event.key_code == .K_TAB do return true
+            if len(global_widget.prompt.buf) == 0 {
+                // TODO(nawe) proper visual error handling here
+                log.error("can't submit buffer selection without a buffer name")
                 return true
             }
+            buffer := buffer_get_or_create_empty(strings.to_string(global_widget.prompt))
+            switch_to_buffer(active_pane, buffer)
+            widget_close()
+            return true
         }
     }
 
     #partial switch cmd {
-        case .modifier: return true // handled as a modifier which is valid in this context
+    case .modifier: return true // handled as a modifier which is valid in this context
     }
 
     return false
@@ -417,58 +416,57 @@ find_file_keyboard_event_handler :: proc(event: Event_Keyboard, cmd: Command) ->
     cursor := &global_widget.cursor
 
     #partial switch event.key_code {
-        case .K_ENTER, .K_TAB: {
-            if cursor.index > -1 {
-                result := global_widget.view_results[cursor.index]
-                file_info := result.value.(Widget_Result_File)
+    case .K_ENTER, .K_TAB:
+        if cursor.index > -1 {
+            result := global_widget.view_results[cursor.index]
+            file_info := result.value.(Widget_Result_File)
 
-                if file_info.is_dir {
-                    current_dir := filepath.clean(file_info.filepath, context.temp_allocator)
-                    strings.builder_reset(&global_widget.prompt)
-                    strings.write_string(&global_widget.prompt, current_dir)
-                    strings.write_string(&global_widget.prompt, "/")
-                    cursor.index = -1
-                    _widget_find_file_open_and_read_dir(current_dir)
-                } else {
-                    data, success := os.read_entire_file(file_info.filepath, context.temp_allocator)
-                    if !success {
-                        log.fatalf("failed to read file '{}'", file_info.filepath)
-                        widget_close()
-                        return true
-                    }
-                    buffer := buffer_get_or_create_from_file(file_info.filepath, data)
-                    switch_to_buffer(active_pane, buffer)
+            if file_info.is_dir {
+                current_dir := filepath.clean(file_info.filepath, context.temp_allocator)
+                strings.builder_reset(&global_widget.prompt)
+                strings.write_string(&global_widget.prompt, current_dir)
+                strings.write_string(&global_widget.prompt, "/")
+                cursor.index = -1
+                _widget_find_file_open_and_read_dir(current_dir)
+            } else {
+                data, success := os.read_entire_file(file_info.filepath, context.temp_allocator)
+                if !success {
+                    log.fatalf("failed to read file '{}'", file_info.filepath)
                     widget_close()
+                    return true
                 }
+                buffer := buffer_get_or_create_from_file(file_info.filepath, data)
+                switch_to_buffer(active_pane, buffer)
+                widget_close()
+            }
 
+            return true
+        } else {
+            if event.key_code == .K_TAB do return true
+            fullpath := strings.to_string(global_widget.prompt)
+            _, name_from_fullpath := filepath.split(fullpath)
+
+            if len(fullpath) == 0 || len(name_from_fullpath) == 0 {
+                log.errorf("cannot create empty file")
                 return true
             } else {
-                if event.key_code == .K_TAB do return true
-                fullpath := strings.to_string(global_widget.prompt)
-                _, name_from_fullpath := filepath.split(fullpath)
+                // if the prompt is a file that is being viewed
+                // but is not selected, search it, select it and
+                // resubmit the event.
+                for result, index in global_widget.view_results {
+                    file_info := result.value.(Widget_Result_File)
 
-                if len(fullpath) == 0 || len(name_from_fullpath) == 0 {
-                    log.errorf("cannot create empty file")
-                    return true
-                } else {
-                    // if the prompt is a file that is being viewed
-                    // but is not selected, search it, select it and
-                    // resubmit the event.
-                    for result, index in global_widget.view_results {
-                        file_info := result.value.(Widget_Result_File)
-
-                        if file_info.filepath == fullpath {
-                            cursor.index = index
-                            return find_file_keyboard_event_handler(event, cmd)
-                        }
+                    if file_info.filepath == fullpath {
+                        cursor.index = index
+                        return find_file_keyboard_event_handler(event, cmd)
                     }
-
-                    // if it wasn't, create the buffer for the new file.
-                    buffer := buffer_get_or_create_from_file(fullpath, {})
-                    switch_to_buffer(active_pane, buffer)
-                    widget_close()
-                    return true
                 }
+
+                // if it wasn't, create the buffer for the new file.
+                buffer := buffer_get_or_create_from_file(fullpath, {})
+                switch_to_buffer(active_pane, buffer)
+                widget_close()
+                return true
             }
         }
     }
@@ -480,62 +478,61 @@ save_file_as_keyboard_event_handler :: proc(event: Event_Keyboard, cmd: Command)
     cursor := &global_widget.cursor
 
     #partial switch event.key_code {
-        case .K_ENTER, .K_TAB: {
-            new_fullpath := strings.to_string(global_widget.prompt)
+    case .K_ENTER, .K_TAB:
+        new_fullpath := strings.to_string(global_widget.prompt)
 
-            if global_widget.ask_for_confirmation && event.key_code == .K_ENTER {
-                buffer_save_as(active_pane.buffer, new_fullpath)
-                widget_close()
-                return true
+        if global_widget.ask_for_confirmation && event.key_code == .K_ENTER {
+            buffer_save_as(active_pane.buffer, new_fullpath)
+            widget_close()
+            return true
+        }
+
+        if cursor.index > -1 {
+            result := global_widget.view_results[cursor.index]
+            file_info := result.value.(Widget_Result_File)
+
+            if file_info.is_dir {
+                current_dir := filepath.clean(file_info.filepath, context.temp_allocator)
+                strings.builder_reset(&global_widget.prompt)
+                strings.write_string(&global_widget.prompt, current_dir)
+                strings.write_string(&global_widget.prompt, "/")
+                cursor.index = -1
+                _widget_find_file_open_and_read_dir(current_dir)
+            } else {
+                strings.builder_reset(&global_widget.prompt)
+                strings.write_string(&global_widget.prompt, file_info.filepath)
+                cursor.pos = len(global_widget.prompt.buf)
+                cursor.sel = cursor.pos
+                cursor.index = -1
+                global_widget.ask_for_confirmation = true
             }
 
-            if cursor.index > -1 {
-                result := global_widget.view_results[cursor.index]
-                file_info := result.value.(Widget_Result_File)
+            return true
+        } else {
+            if event.key_code == .K_TAB do return true
+            _, name_from_fullpath := filepath.split(new_fullpath)
 
-                if file_info.is_dir {
-                    current_dir := filepath.clean(file_info.filepath, context.temp_allocator)
-                    strings.builder_reset(&global_widget.prompt)
-                    strings.write_string(&global_widget.prompt, current_dir)
-                    strings.write_string(&global_widget.prompt, "/")
-                    cursor.index = -1
-                    _widget_find_file_open_and_read_dir(current_dir)
-                } else {
-                    strings.builder_reset(&global_widget.prompt)
-                    strings.write_string(&global_widget.prompt, file_info.filepath)
-                    cursor.pos = len(global_widget.prompt.buf)
-                    cursor.sel = cursor.pos
-                    cursor.index = -1
-                    global_widget.ask_for_confirmation = true
-                }
-
+            if len(new_fullpath) == 0 || len(name_from_fullpath) == 0 {
+                log.errorf("cannot create empty file")
                 return true
             } else {
-                if event.key_code == .K_TAB do return true
-                _, name_from_fullpath := filepath.split(new_fullpath)
+                // if the prompt already exists in the results,
+                // select it and resubmit the event
+                for result, index in global_widget.view_results {
+                    file_info := result.value.(Widget_Result_File)
 
-                if len(new_fullpath) == 0 || len(name_from_fullpath) == 0 {
-                    log.errorf("cannot create empty file")
-                    return true
-                } else {
-                    // if the prompt already exists in the results,
-                    // select it and resubmit the event
-                    for result, index in global_widget.view_results {
-                        file_info := result.value.(Widget_Result_File)
-
-                        if file_info.filepath == new_fullpath {
-                            cursor.index = index
-                            return save_file_as_keyboard_event_handler(event, cmd)
-                        }
+                    if file_info.filepath == new_fullpath {
+                        cursor.index = index
+                        return save_file_as_keyboard_event_handler(event, cmd)
                     }
-
-                    // or just save if it wasn't in the results
-                    buffer_save_as(active_pane.buffer, new_fullpath)
-                    widget_close()
                 }
 
-                return true
+                // or just save if it wasn't in the results
+                buffer_save_as(active_pane.buffer, new_fullpath)
+                widget_close()
             }
+
+            return true
         }
     }
 
@@ -553,35 +550,32 @@ search_in_buffer_keyboard_event_handler :: proc(event: Event_Keyboard, cmd: Comm
     cursor := &global_widget.cursor
 
     #partial switch event.key_code {
-        case .K_ENTER, .K_TAB: {
-            pane_cursor := get_first_active_cursor(active_pane)
-            pane_cursor.sel = pane_cursor.pos
-            widget_close()
-            return true
-        }
+    case .K_ENTER, .K_TAB:
+        pane_cursor := get_first_active_cursor(active_pane)
+        pane_cursor.sel = pane_cursor.pos
+        widget_close()
+        return true
     }
 
     #partial switch cmd {
-        case .search_backward: {
-            _set_last_search_term()
+    case .search_backward:
+        _set_last_search_term()
 
-            if len(global_widget.view_results) > 0 {
-                cursor.index -= 1
-                if cursor.index < 0 do cursor.index = len(global_widget.view_results) - 1
-            }
-
-            return true
+        if len(global_widget.view_results) > 0 {
+            cursor.index -= 1
+            if cursor.index < 0 do cursor.index = len(global_widget.view_results) - 1
         }
-        case .search_forward: {
-            _set_last_search_term()
 
-            if len(global_widget.view_results) > 0 {
-                cursor.index += 1
-                if cursor.index >= len(global_widget.view_results) do cursor.index = 0
-            }
+        return true
+    case .search_forward:
+        _set_last_search_term()
 
-            return true
+        if len(global_widget.view_results) > 0 {
+            cursor.index += 1
+            if cursor.index >= len(global_widget.view_results) do cursor.index = 0
         }
+
+        return true
     }
 
     return false
@@ -836,7 +830,7 @@ _widget_find_file_open_and_read_dir :: proc(current_dir: string) {
         for r in global_widget.all_results {
             delete(r.format)
             #partial switch v in r.value {
-                case Widget_Result_File: delete(v.filepath)
+            case Widget_Result_File: delete(v.filepath)
             }
         }
         clear(&global_widget.all_results)
