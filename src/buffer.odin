@@ -418,7 +418,7 @@ is_crlf :: #force_inline proc(buffer: ^Buffer) -> bool {
 }
 
 is_continuation_byte :: proc(b: byte) -> bool {
-	return b >= 0x80 && b < 0xc0
+    return b >= 0x80 && b < 0xc0
 }
 
 collect_pieces_from_buffer :: proc(
