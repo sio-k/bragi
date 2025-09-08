@@ -1373,6 +1373,7 @@ pane_insert_newlines_and_indent :: proc(pane: ^Pane) {
         _indent_multi_line(
             pane.buffer, unique_lines_to_indent,
             _on_indent_realign_active_pane_cursors,
+            false,
         )
     }
 
@@ -1645,7 +1646,7 @@ _on_indent_realign_active_pane_cursors :: proc(prev_offset, new_offset, amount: 
 }
 
 @(private="file")
-_indent_multi_line :: proc(buffer: ^Buffer, lines_to_indent: []int, after_single_line_indent_callback: Indent_Callback_Proc) {
+_indent_multi_line :: proc(buffer: ^Buffer, lines_to_indent: []int, after_single_line_indent_callback: Indent_Callback_Proc, skip_empty_lines := true) {
     profiling_start("indenting region or multiple lines")
     for line_index in lines_to_indent {
         // somewhat slow here, but we need to reconstruct some lines
@@ -1655,9 +1656,9 @@ _indent_multi_line :: proc(buffer: ^Buffer, lines_to_indent: []int, after_single
         contents := strings.builder_make(context.temp_allocator)
         collect_pieces_from_buffer(buffer, &contents, &temp_line_starts)
         start, end := get_line_boundaries(line_index, temp_line_starts[:])
-        empty_line := start == end
+        is_empty_line := skip_empty_lines && start == end
 
-        if !empty_line {
+        if !is_empty_line {
             _indent_single_line(
                 buffer, strings.to_string(contents),
                 line_index, temp_line_starts[:],
@@ -1695,11 +1696,12 @@ _indent_single_line :: proc(buffer: ^Buffer, text: string, line_index: int, line
     if line_index == 0 do return
     indent_chars_wanted := 0
 
-    test_line_index := line_index - 1
-    for test_line_index > 0 {
-        start, end := get_line_boundaries(test_line_index, lines)
+    // make sure the previous line has some content
+    prev_line_index := line_index - 1
+    for prev_line_index > 0 {
+        start, end := get_line_boundaries(prev_line_index, lines)
         if start == end {
-            test_line_index -= 1
+            prev_line_index -= 1
             continue
         }
 
@@ -1708,7 +1710,7 @@ _indent_single_line :: proc(buffer: ^Buffer, text: string, line_index: int, line
     }
 
     curr_line_start, curr_line_end := get_line_boundaries(line_index, lines)
-    prev_line_start, prev_line_end := get_line_boundaries(line_index - 1, lines)
+    prev_line_start, prev_line_end := get_line_boundaries(prev_line_index, lines)
     indent_chars_in_curr_line := count_indent_chars(text[curr_line_start:curr_line_end])
 
     curr_line_tokens := get_indentation_tokens(buffer, text[curr_line_start:curr_line_end])
@@ -1741,8 +1743,8 @@ _indent_single_line :: proc(buffer: ^Buffer, text: string, line_index: int, line
         }
 
         // if we're not at the top of the buffer, we do some extra checks
-        if line_index - 2 > 0 {
-            prev2_line_start, prev2_line_end := get_line_boundaries(line_index - 2, lines)
+        if prev_line_index > 0 {
+            prev2_line_start, prev2_line_end := get_line_boundaries(prev_line_index - 1, lines)
             prev2_line_tokens := get_indentation_tokens(buffer, text[prev2_line_start:prev2_line_end])
             last_token2 := prev2_line_tokens[len(prev2_line_tokens)-1]
 
