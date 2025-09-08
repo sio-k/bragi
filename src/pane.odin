@@ -1654,12 +1654,16 @@ _indent_multi_line :: proc(buffer: ^Buffer, lines_to_indent: []int, after_single
         temp_line_starts := make([dynamic]int, context.temp_allocator)
         contents := strings.builder_make(context.temp_allocator)
         collect_pieces_from_buffer(buffer, &contents, &temp_line_starts)
+        start, end := get_line_boundaries(line_index, temp_line_starts[:])
+        empty_line := start == end
 
-        _indent_single_line(
-            buffer, strings.to_string(contents),
-            line_index, temp_line_starts[:],
-            after_single_line_indent_callback,
-        )
+        if !empty_line {
+            _indent_single_line(
+                buffer, strings.to_string(contents),
+                line_index, temp_line_starts[:],
+                after_single_line_indent_callback,
+            )
+        }
     }
     profiling_end()
 }
