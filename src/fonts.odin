@@ -33,7 +33,7 @@ Font :: struct {
     textures:                Font_Texture_Bucket,
     last_packed_glyph:       ^Glyph_Data,
 
-    base_height:             f32, // the height that was used when requesting the font
+    base_height:             i32, // the height that was used when requesting the font
     em_width:                i32,
     character_height:        i32,
     max_ascender:            i32,
@@ -123,12 +123,13 @@ initialize_font_related_stuff :: proc() {
     prepare_text(fonts_map[.UI_Small],   "0123456789") // tipically used for numbers
 }
 
-font_to_scaled_pixels :: proc(pt: f32, size_diff: f32 = 0, scale: f32 = 1.0) -> f32 {
+font_to_scaled_pixels :: proc(pt: f32, size_diff: f32 = 0, scale: f32 = 1.0) -> i32 {
     result := math.ceil(((pt + size_diff) * dpi_scale) * scale)
-    return clamp(result, MINIMUM_FONT_SIZE, MAXIMUM_FONT_SIZE)
+    result = clamp(result, MINIMUM_FONT_SIZE, MAXIMUM_FONT_SIZE)
+    return i32(result)
 }
 
-get_font_with_size :: proc(name: string, data: []byte, character_height: f32) -> ^Font {
+get_font_with_size :: proc(name: string, data: []byte, character_height: i32) -> ^Font {
     ensure_fonts_are_initialized()
 
     for font in fonts_cache {
@@ -138,7 +139,7 @@ get_font_with_size :: proc(name: string, data: []byte, character_height: f32) ->
     }
 
     font_data := sdl.IOFromMem(raw_data(data), len(data))
-    face := ttf.OpenFontIO(font_data, true, character_height)
+    face := ttf.OpenFontIO(font_data, true, f32(character_height))
 
     ttf.SetFontHinting(face, .LIGHT_SUBPIXEL)
 

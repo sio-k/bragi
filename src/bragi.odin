@@ -222,12 +222,15 @@ main :: proc() {
                 }
 
                 should_resize_window_to_mininum := false
+                should_reinit_fonts := false
+                should_resize_panes := false
                 window_in_focus = v.window_focused
 
                 if v.dpi_scale != dpi_scale {
                     log.debugf("updating necessary stuff after DPI change")
                     dpi_scale = v.dpi_scale
-                    initialize_font_related_stuff()
+                    should_reinit_fonts = true
+                    should_resize_panes = true
                 }
 
                 if window_width != v.window_width || window_height != v.window_height {
@@ -251,9 +254,18 @@ main :: proc() {
                         platform_resize_window(window_width, window_height)
                     }
 
+                    should_resize_panes = true
+                }
+
+                if should_resize_panes {
                     log.debug("updating necessary textures after resizing")
                     update_pane_layout()
                     update_widget_texture()
+                }
+
+                if should_reinit_fonts {
+                    log.debug("reinitializing fonts")
+                    initialize_font_related_stuff()
                 }
 
                 event.handled = true
