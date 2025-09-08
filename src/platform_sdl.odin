@@ -130,9 +130,6 @@ platform_destroy :: proc() {
 platform_sleep :: proc() {
     when BRAGI_DEBUG {
         if DEBUG_is_slow_frames_on() do sdl.Delay(32)
-    } else {
-        // ~240 FPS is a lot...
-        sdl.Delay(4)
     }
 }
 

@@ -125,32 +125,29 @@ update_and_draw_panes :: proc() {
         assert(pane.buffer != nil)
         assert(pane.texture != nil)
         assert(len(pane.cursors) > 0)
-        is_active_pane := pane.uuid == active_pane.uuid
-
-        if is_active_pane {
-            if time.tick_diff(last_keystroke, time.tick_now()) < CURSOR_RESET_TIMEOUT {
-                pane.cursor_showing = true
-                pane.cursor_blink_count = 0
-                pane.cursor_blink_timer = time.tick_now()
-                flag_pane(pane, {.Need_Full_Repaint})
-            }
-
-            if should_cursor_blink(pane) {
-                pane.cursor_showing = !pane.cursor_showing
-                pane.cursor_blink_count += 1
-                pane.cursor_blink_timer = time.tick_now()
-
-                if pane.cursor_blink_count >= CURSOR_BLINK_MAX_COUNT {
-                    pane.cursor_showing = true
-                }
-
-                flag_pane(pane, {.Need_Full_Repaint})
-            }
-        }
 
         if pane.cursor_moved {
             pane.cursor_moved = false
             maybe_scroll_pane_to_cursor_view(pane)
+            flag_pane(pane, {.Need_Full_Repaint})
+        }
+
+        if time.tick_diff(last_keystroke, time.tick_now()) < CURSOR_RESET_TIMEOUT {
+            pane.cursor_showing = true
+            pane.cursor_blink_count = 0
+            pane.cursor_blink_timer = time.tick_now()
+            flag_pane(pane, {.Need_Full_Repaint})
+        }
+
+        if should_cursor_blink(pane) {
+            pane.cursor_showing = !pane.cursor_showing
+            pane.cursor_blink_count += 1
+            pane.cursor_blink_timer = time.tick_now()
+
+            if pane.cursor_blink_count >= CURSOR_BLINK_MAX_COUNT {
+                pane.cursor_showing = true
+            }
+
             flag_pane(pane, {.Need_Full_Repaint})
         }
 
@@ -179,8 +176,8 @@ update_and_draw_panes :: proc() {
             if !has_selection(cursor) do continue
             if (cursor.pos < first_offset || cursor.pos > last_offset) &&
                 (cursor.sel < first_offset || cursor.sel > last_offset) {
-                    continue
-                }
+                continue
+            }
 
             low, high := sorted_cursor(cursor)
             append(&highlights, Highlight{
@@ -578,7 +575,6 @@ get_pane_visible_rows :: proc(pane: ^Pane) -> (result: int) {
     modeline_height := f32(get_modeline_height())
     result = int((pane_height - modeline_height)/font_height)
     return result
-
 }
 
 get_modeline_height :: #force_inline proc() -> i32 {
@@ -689,6 +685,9 @@ pane_handle_mouse_events :: proc() {
     if mouse_state.left_button.is_dragging {
         // we don't change panes while dragging
         pane := active_pane
+
+        if len(pane.buffer.text) == 0 do return
+
         cursor := get_first_active_cursor(pane)
         current := mouse_state.position
         curr_mpos := Vector2{current.x - i32(pane.rect.x), current.y - i32(pane.rect.y)}
@@ -1662,8 +1661,8 @@ _indent_multi_line :: proc(buffer: ^Buffer, lines_to_indent: []int, after_single
     profiling_start("indenting region or multiple lines")
     for line_index in lines_to_indent {
         // somewhat slow here, but we need to reconstruct some lines
-        // in order to figure out how much we need to
-        // indent. Hopefully we don't have to go to the end of the file.
+        // in order to figure out how much we need to indent. Hopefully
+        // we don't have to go to the end of the file.
         temp_line_starts := make([dynamic]int, context.temp_allocator)
         contents := strings.builder_make(context.temp_allocator)
         collect_pieces_from_buffer(buffer, &contents, &temp_line_starts)
@@ -1724,13 +1723,41 @@ _indent_single_line :: proc(buffer: ^Buffer, text: string, line_index: int, line
     prev_line_tokens := get_indentation_tokens(buffer, text[prev_line_start:prev_line_end])
     first_curr_token := curr_line_tokens[0]
     first_prev_token := prev_line_tokens[0]
-    last_prev_token := prev_line_tokens[len(prev_line_tokens)-1]
+    last_prev_token  := prev_line_tokens[len(prev_line_tokens)-1]
+    delta := 0
+    prev_line_ends_with_opening_token := false
+    prev_line_ends_with_closing_token := false
 
-    delta := _calculate_indent_delta(prev_line_tokens)
+    for t, index in prev_line_tokens {
+        switch t.action {
+        case .None: // nothing
+        case .Open:  delta += 1
+        case .Close: delta -= 1
+        case .Line_Continuation: // manually handled
+        }
 
-    // the start of the previous line was a closing token
+        if index == len(prev_line_tokens) - 2 {
+            prev_line_ends_with_opening_token = t.action == .Open
+            prev_line_ends_with_closing_token = t.action == .Close
+        }
+    }
+
+    if prev_line_ends_with_opening_token && delta > 1 {
+        delta -= 1
+    }
+
+    // the start of the previous line was a closing token so it can realign
+    // when inserting a newline (due to electric indentation), but we need to
+    // walk that back when another newline is inserted.
     if first_prev_token.action == .Close {
-        delta += 1
+        last_closing_kind: Indentation_Token_Kind
+
+        for t in prev_line_tokens {
+            if t.action != .Close do break
+            if t.kind == last_closing_kind do break
+            delta += 1
+            last_closing_kind = t.kind
+        }
     }
 
     // the start of this line is a closing token
@@ -1836,23 +1863,4 @@ _calculate_new_indent :: #force_inline proc(buffer: ^Buffer, current_indent, del
     case .tab:   result += delta
     }
     return max(result, 0)
-}
-
-@(private="file")
-_calculate_indent_delta :: proc(tokens: []Indentation_Token) -> (delta: int) {
-    // maybe this should be a little bit more consistent, making sure
-    // that the token that opened the next level of indentation is the
-    // first one to be used to close it?
-
-    // Emacs doesn't care if you're closing a block with the correct
-    // token, so for now we'll follow the same approach.
-    for token in tokens {
-        switch token.action {
-        case .None:              // nothing
-        case .Close:             delta -= 1
-        case .Open:              delta += 1
-        case .Line_Continuation: // nothing, should be handled manually
-        }
-    }
-    return
 }

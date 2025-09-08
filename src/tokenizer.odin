@@ -57,6 +57,13 @@ Punctuation :: enum {
     Question, Newline, Semicolon, Tab,
 }
 
+Indentation_Token_Kind :: enum u8 {
+    Unimportant, // just a default
+    Brace,
+    Bracket,
+    Paren,
+}
+
 Basic_Token :: struct {
     kind: Token_Kind,
     start, length: int,
@@ -72,12 +79,7 @@ Indentation_Token :: struct {
         // and want some indentation, but that indentation not to carry over.
         Line_Continuation,
     },
-    kind: enum u8 {
-        Unimportant, // just a default
-        Brace,
-        Bracket,
-        Paren,
-    },
+    kind: Indentation_Token_Kind,
 }
 
 Tokenizer :: struct {
