@@ -63,7 +63,6 @@ tokenize_odin_indentation :: proc(buffer: ^Buffer, text: string) -> []Indentatio
     tokenizer: Odin_Tokenizer
     tokenizer.buf = text
     tokens := make([dynamic]Indentation_Token, context.temp_allocator)
-    case_keyword_found := false
 
     for {
         token := get_next_token(&tokenizer)
@@ -75,30 +74,25 @@ tokenize_odin_indentation :: proc(buffer: ^Buffer, text: string) -> []Indentatio
         case .EOF:
             p0, _, _ := get_previous_tokens(&tokenizer)
             if p0.kind == .Operation {
-                if _, is_operation := p0.variant.(Operation); is_operation {
-                    indent.action = .Line_Continuation
+                if op, is_op := p0.variant.(Operation); is_op {
+                    if op != .Colon {
+                        indent.action = .Line_Continuation
+                    }
                 }
             }
         case .Keyword:
             if token.text == "case" {
+                // leaves 2 tokens, the closing one from the 'case' keyword,
+                // according to Odin standards, and an opening one for when
+                // the line breaks
                 indent.action = .Close
                 indent.kind = .Brace
-                case_keyword_found = true
-            }
-        case .Operation:
-            if operation, is_operation := token.variant.(Operation); is_operation {
-                #partial switch operation {
-                case .Colon:
-                    if case_keyword_found {
-                        indent.action = .Open
-                        indent.kind = .Brace
-                    }
-                }
+                append(&tokens, indent)
+                indent.action = .Open
             }
         case .Punctuation:
             if punctuation, is_punctuation := token.variant.(Punctuation); is_punctuation {
                 #partial switch punctuation {
-                case .Newline: if case_keyword_found do case_keyword_found = false
                 case .Brace_Left:    indent.action = .Open;  indent.kind = .Brace
                 case .Brace_Right:   indent.action = .Close; indent.kind = .Brace
                 case .Bracket_Left:  indent.action = .Open;  indent.kind = .Bracket

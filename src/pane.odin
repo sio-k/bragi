@@ -1730,8 +1730,10 @@ _indent_single_line :: proc(buffer: ^Buffer, text: string, line_index: int, line
         }
     }
 
+    // if the previous line opens multiple scopes, we go back to just
+    // one level of indentation.
     if prev_line_ends_with_opening_token && delta > 1 {
-        delta -= 1
+        delta = 1
     }
 
     // the start of the previous line was a closing token so it can realign

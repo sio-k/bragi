@@ -17,7 +17,6 @@ Token_Kind :: enum u8 {
     Punctuation,
 
     Constant,
-    Decorator,
     Directive,
     Enum_Variant,
     Function,
