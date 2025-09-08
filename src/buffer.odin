@@ -175,67 +175,6 @@ show_buffer_readonly_message :: proc(buffer: ^Buffer) {
     log.debugf("buffer '{}' is read only", buffer.name)
 }
 
-@(private="file")
-_buffer_set_major_mode :: proc(buffer: ^Buffer) {
-    if buffer.filepath != "" {
-        ext := filepath.ext(buffer.filepath)
-        buffer.major_mode = get_major_mode_by_extension(ext)
-    } else {
-        ext := filepath.ext(buffer.name)
-        buffer.major_mode = get_major_mode_by_extension(ext)
-    }
-}
-
-@(private="file")
-_get_unique_buffer_name :: proc(buffer: ^Buffer, fullpath: string) -> (result: string) {
-    _gen_name_from_fullpath :: proc(prev_name: string, fullpath: string) -> (new_name: string) {
-        posix_fullpath, _ := filepath.to_slash(fullpath, context.temp_allocator)
-        substr_index := strings.index(posix_fullpath, prev_name)
-        substr_index = max(substr_index - 1, 0)
-        for substr_index > 0 && posix_fullpath[substr_index-1] != '/' do substr_index -= 1
-        new_name = posix_fullpath[substr_index:len(posix_fullpath)]
-        return
-    }
-
-    matching_name := filepath.base(fullpath)
-    result = matching_name
-    buffers_with_matching_names := make([dynamic]^Buffer, context.temp_allocator)
-
-    for {
-        // find the buffers with matching_name
-        for other in open_buffers {
-            // if a buffer is passed to this procedure, skip it in the
-            // check. Good for when doing "save as" in buffers that
-            // will be renamed anyways.
-            if buffer.uuid == other.uuid do continue
-            if other.filepath != "" {
-                if other.name == result {
-                    append(&buffers_with_matching_names, other)
-                } else if filepath.base(other.filepath) == result {
-                    append(&buffers_with_matching_names, other)
-                }
-            }
-        }
-
-        if len(buffers_with_matching_names) == 0 do break
-
-        // rename older existing buffers to be their minimal
-        // expression of uniqueness while having the new one be very
-        // unique, appending as much as it is needed so it doesn't
-        // repeat.
-        for len(buffers_with_matching_names) > 0 {
-            other := pop(&buffers_with_matching_names)
-            delete(other.name)
-            new_name := _gen_name_from_fullpath(filepath.base(other.filepath), other.filepath)
-            other.name = strings.clone(new_name)
-        }
-
-        result = _gen_name_from_fullpath(result, fullpath)
-    }
-
-    return
-}
-
 buffer_save_as :: proc(buffer: ^Buffer, fullpath: string) {
     flag_buffer(buffer, {.Modified})
 
@@ -317,7 +256,6 @@ _purge_whitespaces_from_buffer :: proc(buffer: ^Buffer) -> (changed: bool) {
     if len(whitespaces_to_remove) > 0 {
         changed = true
         log.debug("removing trailing whitespaces")
-        log.debug(whitespaces_to_remove)
     }
 
     for to_rem, index in whitespaces_to_remove {
@@ -684,4 +622,65 @@ _create_original_piece :: proc(length: int = 0) -> Piece {
         start  = 0,
         length = length,
     }
+}
+
+@(private="file")
+_buffer_set_major_mode :: proc(buffer: ^Buffer) {
+    if buffer.filepath != "" {
+        ext := filepath.ext(buffer.filepath)
+        buffer.major_mode = get_major_mode_by_extension(ext)
+    } else {
+        ext := filepath.ext(buffer.name)
+        buffer.major_mode = get_major_mode_by_extension(ext)
+    }
+}
+
+@(private="file")
+_get_unique_buffer_name :: proc(buffer: ^Buffer, fullpath: string) -> (result: string) {
+    _gen_name_from_fullpath :: proc(prev_name: string, fullpath: string) -> (new_name: string) {
+        posix_fullpath, _ := filepath.to_slash(fullpath, context.temp_allocator)
+        substr_index := strings.index(posix_fullpath, prev_name)
+        substr_index = max(substr_index - 1, 0)
+        for substr_index > 0 && posix_fullpath[substr_index-1] != '/' do substr_index -= 1
+        new_name = posix_fullpath[substr_index:len(posix_fullpath)]
+        return
+    }
+
+    matching_name := filepath.base(fullpath)
+    result = matching_name
+    buffers_with_matching_names := make([dynamic]^Buffer, context.temp_allocator)
+
+    for {
+        // find the buffers with matching_name
+        for other in open_buffers {
+            // if a buffer is passed to this procedure, skip it in the
+            // check. Good for when doing "save as" in buffers that
+            // will be renamed anyways.
+            if buffer.uuid == other.uuid do continue
+            if other.filepath != "" {
+                if other.name == result {
+                    append(&buffers_with_matching_names, other)
+                } else if filepath.base(other.filepath) == result {
+                    append(&buffers_with_matching_names, other)
+                }
+            }
+        }
+
+        if len(buffers_with_matching_names) == 0 do break
+
+        // rename older existing buffers to be their minimal
+        // expression of uniqueness while having the new one be very
+        // unique, appending as much as it is needed so it doesn't
+        // repeat.
+        for len(buffers_with_matching_names) > 0 {
+            other := pop(&buffers_with_matching_names)
+            delete(other.name)
+            new_name := _gen_name_from_fullpath(filepath.base(other.filepath), other.filepath)
+            other.name = strings.clone(new_name)
+        }
+
+        result = _gen_name_from_fullpath(result, fullpath)
+    }
+
+    return
 }

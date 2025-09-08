@@ -330,13 +330,15 @@ unflag_pane :: #force_inline proc(pane: ^Pane, flags: Pane_Flags) {
     pane.flags -= flags
 }
 
-add_cursor :: proc(pane: ^Pane, pos := 0) {
+add_cursor :: proc(pane: ^Pane, pos := 0) -> ^Cursor {
     append(&pane.cursors, Cursor{
         active = true,
         pos = pos,
         sel = pos,
         last_column = -1,
     })
+
+    return &pane.cursors[len(pane.cursors)-1]
 }
 
 cursor_clone :: proc(pane: ^Pane, cursor_to_clone: Cursor) -> ^Cursor {
@@ -769,6 +771,9 @@ pane_keyboard_event_handler :: proc(event: Event_Keyboard, cmd: Command) -> bool
         return false
     case .find_file:
         widget_open_find_file()
+        return true
+    case .replace_in_buffer:
+        widget_open_replace_in_buffer()
         return true
     case .search_backward: fallthrough
     case .search_forward:

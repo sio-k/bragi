@@ -157,7 +157,6 @@ _settings_setup_basic_bragi_keybindings :: proc() {
     commands_map["CTRL-1"] = .close_other_panes
     commands_map["CTRL-2"] = .close_this_pane
     commands_map["CTRL-3"] = .new_pane_to_the_right
-    commands_map["CTRL-O"] = .other_pane
 
     commands_map["ALT-UP"]           = .clone_cursor_above
     commands_map["ALT-DOWN"]         = .clone_cursor_below
@@ -228,6 +227,7 @@ use_nawe_keybindings :: proc() {
     commands_map["CTRL-X-B"]       = .find_buffer
     commands_map["ALT-X"]          = .find_command
     commands_map["CTRL-X-CTRL-F"]  = .find_file
+    commands_map["ALT-%"]          = .replace_in_buffer
 
     commands_map["CTRL-X-K"]       = .close_current_buffer
     commands_map["CTRL-X-CTRL-S"]  = .save_buffer

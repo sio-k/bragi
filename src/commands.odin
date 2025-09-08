@@ -65,13 +65,13 @@ Command :: enum u32 {
     find_buffer,
     find_command,
     find_file,
+    search_backward,
+    search_forward,
+    replace_in_buffer,
 
     close_current_buffer,
     save_buffer,
     save_buffer_as,
-
-    search_backward,
-    search_forward,
 
     close_this_pane,
     close_other_panes,
