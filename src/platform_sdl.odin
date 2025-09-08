@@ -159,9 +159,9 @@ platform_update_events :: proc() {
             }
 
             input_register(Event_Drop_File{
-                    filepath = strings.clone(filepath),
-                    data = data,
-                })
+                filepath = strings.clone(filepath),
+                data = data,
+            })
         case .WINDOW_FOCUS_GAINED, .WINDOW_FOCUS_LOST, .WINDOW_MOVED, .WINDOW_RESIZED, .WINDOW_MAXIMIZED:
             // NOTE(nawe) Performance: it might be just better to
             // keep these resizes in a different list of events so
