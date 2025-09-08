@@ -104,8 +104,11 @@ desktop_init :: proc() {
         }
 
         if buffer_found {
-            clear(&new_pane.cursors)
-            for cursor in pane_info.cursors do add_cursor(new_pane, cursor)
+            // TODO(nawe) need to fix this by taking the length of the buffer
+            //clear(&new_pane.cursors)
+            //for cursor in pane_info.cursors {
+            //    add_cursor(new_pane, clamp(cursor, 0, len(new_pane.buffer.original_source.buf)))
+            //}
         }
 
         delete(pane_info.cursors)
