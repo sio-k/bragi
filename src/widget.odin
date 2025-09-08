@@ -20,8 +20,6 @@ Search_In_Buffer :: struct {}
 Replace_In_Buffer :: struct {
     step:           enum { step1, step2, step3 },
     from, to:       string,
-    update_results: bool,
-
 }
 
 Widget_Action :: union {
@@ -45,6 +43,7 @@ Widget :: struct {
     results_need_update:  bool,
     prompt:               strings.Builder,
     prompt_question:      string,
+    hide_prompt:          bool,
     ask_for_confirmation: bool,
 
     previous_buffer:      ^Buffer,
@@ -616,8 +615,10 @@ replace_in_buffer_keyboard_event_handler :: proc(event: Event_Keyboard, cmd: Com
             action.step = .step3
             action.to = strings.clone(strings.to_string(global_widget.prompt))
             strings.builder_reset(&global_widget.prompt)
+            strings.write_string(&global_widget.prompt, action.from)
             cursor.pos = 0
             cursor.sel = 0
+            global_widget.hide_prompt = true
         case .step3:
             if event.key_code == .K_EXCLAIM {
                 clear(&active_pane.cursors)
@@ -636,8 +637,8 @@ replace_in_buffer_keyboard_event_handler :: proc(event: Event_Keyboard, cmd: Com
             } else if event.key_code == .K_ENTER {
                 copy_cursors(active_pane, active_pane.buffer)
                 pane_insert_at_points(active_pane, action.to)
-                action.update_results = true
                 active_pane.cursor_moved = true
+                global_widget.results_need_update = true
             } else if event.key_code == .K_TAB {
                 cursor.index += 1
                 if cursor.index >= len(global_widget.view_results) {
@@ -714,7 +715,8 @@ update_and_draw_widget :: proc() {
         }
 
         results_pen = draw_highlighted_text(
-            font_regular, font_bold, .foreground, .ui_selection_background, .ui_selection_foreground,
+            font_regular, font_bold,
+            .foreground, .ui_selection_background, .ui_selection_foreground,
             results_pen, result.format, result.highlights[:], is_selected,
         )
     }
@@ -753,12 +755,14 @@ update_and_draw_widget :: proc() {
 
         set_color(.foreground, font_regular)
         prompt_ask_pen := draw_text(font_bold, {left_padding, 0}, prompt_ask_str)
-        draw_text_line(font_regular, prompt_ask_pen, prompt_query_str, {start = cursor.pos, end = cursor.sel})
+        if !global_widget.hide_prompt {
+            draw_text_line(font_regular, prompt_ask_pen, prompt_query_str, {start = cursor.pos, end = cursor.sel})
+        }
 
         cursor_pen := prompt_ask_pen
         cursor_pen.x += prepare_text(font_regular, prompt_query_str[:cursor.pos])
         rune_behind_cursor := ' '
-        if cursor.pos < len(prompt_query_str) {
+        if !global_widget.hide_prompt && cursor.pos < len(prompt_query_str) {
             rune_behind_cursor = utf8.rune_at(prompt_query_str, cursor.pos)
         }
         draw_cursor(font_regular, cursor_pen, rune_behind_cursor, global_widget.cursor_showing, true, true)
@@ -1193,23 +1197,17 @@ _replace_in_buffer_widget_update :: proc() {
     case .step2:
         global_widget.prompt_question = fmt.tprintf("Replace {} with", action.from)
     case .step3:
-        if action.update_results {
-            action.update_results = false
-            strings.write_string(&global_widget.prompt, action.from)
-            global_widget.results_need_update = true
-            _search_in_buffer_widget_update()
-            strings.builder_reset(&global_widget.prompt)
-
-            if len(global_widget.view_results) == 0 {
-                last_cursor := active_pane.cursors[len(active_pane.cursors)-1]
-                clear(&active_pane.cursors)
-                add_cursor(active_pane, last_cursor.pos)
-                widget_close()
-            }
-        }
-
         global_widget.prompt_question = fmt.tprintf(
             "Replace {} with {} | Yes: <ENTER> No: <TAB> All: <!>", action.from, action.to,
         )
+
+        _search_in_buffer_widget_update()
+
+        if len(global_widget.view_results) == 0 {
+            last_cursor := active_pane.cursors[len(active_pane.cursors)-1]
+            clear(&active_pane.cursors)
+            add_cursor(active_pane, last_cursor.pos)
+            widget_close()
+        }
     }
 }

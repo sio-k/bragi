@@ -45,7 +45,7 @@ tokenize_odin :: proc(buffer: ^Buffer, starting_offset := 0) {
             } else if is_op && op == .Colon && t2.kind == .Identifier {
                 token.kind = .Type
             }
-        case should_save_struct_or_enum_name(&tokenizer, token):
+        case should_save_type_def_name(&tokenizer, token):
             t2.kind = .Type
             save_token(buffer, &tokenizer, t2)
         }
@@ -599,8 +599,12 @@ should_save_current_token_like_type :: proc(t: ^Odin_Tokenizer, token: Token) ->
     return token.kind == .Identifier && ok && punctuation == .Caret
 }
 
-should_save_struct_or_enum_name :: proc(t: ^Odin_Tokenizer, token: Token) -> bool {
-    if token.kind == .Keyword && (token.text == "struct" || token.text == "enum") {
+should_save_type_def_name :: proc(t: ^Odin_Tokenizer, token: Token) -> bool {
+    is_typedef_name :: proc(s: string) -> bool {
+        return (s == "struct" || s == "enum" || s == "union")
+    }
+
+    if token.kind == .Keyword && is_typedef_name(token.text) {
         t1, _, _ := get_previous_tokens(t)
         if op, is_op := t1.variant.(Operation); is_op {
             return op == .Colon_Colon
