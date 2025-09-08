@@ -245,8 +245,8 @@ parse_directive :: proc(t: ^Odin_Tokenizer, token: ^Token) {
     // maybe global directives like #+private
     if is_char(t, '+') {
         t.offset += 1
+        if is_eof(t) do return
     }
-    if is_eof(t) do return
 
     token.text = read_word(t)
     if slice.contains(ATTRIBUTES, token.text) do token.kind = .Directive
