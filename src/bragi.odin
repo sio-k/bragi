@@ -260,7 +260,7 @@ main :: proc() {
                 if should_resize_panes {
                     log.debug("updating necessary textures after resizing")
                     update_pane_layout()
-                    update_widget_texture()
+                    update_widget_layout()
                 }
 
                 if should_reinit_fonts {

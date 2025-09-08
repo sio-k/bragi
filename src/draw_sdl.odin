@@ -115,6 +115,11 @@ set_target :: #force_inline proc(target: ^Texture = nil) {
 }
 
 set_scissors :: #force_inline proc(rect: ^IRect = nil) {
+    if rect != nil {
+        set_color(.background)
+        draw_rect(rect.x, rect.y, rect.w, rect.h, true)
+    }
+
     sdl.SetRenderViewport(renderer, rect)
 }
 
@@ -436,7 +441,12 @@ draw_modeline :: proc(pane: ^Pane) {
     profiling_end()
 }
 
-draw_rect :: #force_inline proc(x, y, w, h: i32, fill := true) {
+draw_rect :: proc{
+    draw_rect_i32,
+    draw_rect_f32,
+}
+
+draw_rect_i32 :: #force_inline proc(x, y, w, h: i32, fill := true) {
     rect := make_rect(x, y, w, h)
 
     if fill {

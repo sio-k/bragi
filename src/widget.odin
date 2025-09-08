@@ -50,8 +50,7 @@ Widget :: struct {
     previous_buffer:      ^Buffer,
 
     font:                 ^Font,
-    texture:              ^Texture,
-    rect:                 Rect,
+    rect:                 IRect,
     y_offset:             int,
 }
 
@@ -85,15 +84,13 @@ Widget_Result_Offset :: int
 
 widget_init :: proc() {
     global_widget.font = fonts_map[.UI_Regular]
-    update_widget_texture()
+    update_widget_layout()
 }
 
-update_widget_texture :: proc() {
+update_widget_layout :: proc() {
     assert(global_widget.font != nil)
-    texture_destroy(global_widget.texture)
     widget_height := global_widget.font.character_height * WIDGET_HEIGHT_IN_ROWS
-    global_widget.rect = make_rect(0, window_height - widget_height, window_width, widget_height)
-    global_widget.texture = texture_create(.TARGET, i32(global_widget.rect.w), i32(global_widget.rect.h))
+    global_widget.rect = {0, window_height - widget_height, window_width, widget_height}
 }
 
 widget_open_find_buffer :: proc() {
@@ -690,9 +687,8 @@ update_and_draw_widget :: proc() {
     for cursor.index < global_widget.y_offset do global_widget.y_offset -= 1
     if  cursor.index <= 0 do global_widget.y_offset = 0
 
-    set_target(global_widget.texture)
-    set_color(.background)
-    prepare_for_drawing()
+    set_scissors(&global_widget.rect)
+
     prompt_ask_str := fmt.tprintf(
         "{}/{}  {}: ",
         cursor.index + 1,
@@ -774,8 +770,7 @@ update_and_draw_widget :: proc() {
         draw_cursor(font_regular, cursor_pen, rune_behind_cursor, global_widget.cursor_showing, true, true)
     }
 
-    set_target()
-    draw_texture(global_widget.texture, nil, &global_widget.rect)
+    set_scissors()
 }
 
 @(private="file")
