@@ -6,6 +6,8 @@ Bug/Trailing Whitespace: when creating an empty line that is not wrapped, it is 
 
 Bug/Indentation: should skip comments when indenting
 
+Bug/Search: when doing a search and the atom is not found, it will still mark the region of the closest item. Example, search "DPI" (lowercase) and see this being highlighted: "dpy"
+
 Improvement/Buffer: make the buffer piece table to actually store the line starts and cache them. This is a big improvement for bigger files as after the first load we might just not need to fully calculate lines again. Maybe we can also cache the pieces that have changed.
 
 Improvements/Search: make search interactive. For example, allow a command to create a cursor on each search result.
@@ -24,6 +26,8 @@ Improvement/Prev-Forward Word: should use smarter delimiters
 
 Improvement/Desktop File: add versioning
 
+Improvement/Switch buffer should be smarter on which buffer it should pick. Maybe keep the previous buffer as part of the pane itself so it knows which one to prioritize, before sorting by usage.
+
 Improvement/When the panes are looking at the same buffer, the inactive pane's cursor should not move if there's text being entered before that cursor. Maybe we need to update the offsets accordingly for all panes in case this happens?
 
 Feature/Mouse: add mouse support to pane/edit
@@ -31,8 +35,6 @@ Feature/Mouse: add mouse support to pane/edit
 Feature/Marks: save pane/buffer marks for some user actions. Show the existing marks on the pane fringe
 
 Feature/Project mode: navigate through project files on find-file or find-buffer easily.
-
-Feature/Search and Replace!
 
   ----------------
  /   NICETIES   /

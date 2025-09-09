@@ -944,6 +944,7 @@ _widget_open :: proc() {
     global_widget.cursor.sel = 0
     global_widget.cursor.index = -1
     global_widget.active = true
+    global_widget.hide_prompt = false
     global_widget.ask_for_confirmation = false
     global_widget.previous_buffer = active_pane.buffer
     flag_pane(active_pane, {.Need_Full_Repaint})

@@ -39,27 +39,50 @@ tokenize_jai_indentation :: proc(buffer: ^Buffer, text: string) -> []Indentation
     tokenizer: Jai_Tokenizer
     tokenizer.buf = text
     tokens := make([dynamic]Indentation_Token, context.temp_allocator)
+    case_found := false
+    maybe_inlined_stmt := false
 
     for {
         token := get_next_token(&tokenizer)
         indent: Indentation_Token
 
         #partial switch token.kind {
-        case .Keyword:
-            if token.text == "case" {
-                // case keywords in Jai need to close the previous block and open a new one...
-                indent0: Indentation_Token
-                indent0.action = .Close
-                indent0.kind = .Brace
-                append(&tokens, indent0)
-
+        case .EOF:
+            switch {
+            case case_found:
+                case_found = false
                 indent.action = .Open
                 indent.kind = .Brace
+            case maybe_inlined_stmt:
+                maybe_inlined_stmt = false
+                indent.action = .Line_Continuation
+            }
+        case .Keyword:
+            switch {
+            case token.text == "case":
+                case_found = true
+                indent.action = .Close
+                indent.kind = .Brace
+            case token.text == "if" || token.text == "for":
+                maybe_inlined_stmt = true
             }
         case .Punctuation:
             if punctuation, is_punctuation := token.variant.(Punctuation); is_punctuation {
                 #partial switch punctuation {
-                case .Brace_Left:    indent.action = .Open;  indent.kind = .Brace
+                case .Semicolon:
+                    // the line was completed before breakign the line
+                    maybe_inlined_stmt = false
+                case .Newline:
+                    if case_found {
+                        case_found = false
+                        indent.action = .Open
+                        indent.kind = .Brace
+                    }
+                case .Brace_Left:    {
+                    maybe_inlined_stmt = false
+                    indent.action = .Open
+                    indent.kind = .Brace
+                }
                 case .Brace_Right:   indent.action = .Close; indent.kind = .Brace
                 case .Bracket_Left:  indent.action = .Open;  indent.kind = .Bracket
                 case .Bracket_Right: indent.action = .Close; indent.kind = .Bracket

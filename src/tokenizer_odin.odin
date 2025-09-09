@@ -89,9 +89,9 @@ tokenize_odin_indentation :: proc(buffer: ^Buffer, text: string) -> []Indentatio
             }
         case .Keyword:
             if token.text == "case" {
+                case_found = true
                 indent.action = .Close
                 indent.kind = .Brace
-                case_found = true
             }
         case .Punctuation:
             if punctuation, is_punctuation := token.variant.(Punctuation); is_punctuation {
