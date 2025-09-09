@@ -37,6 +37,7 @@ Token :: struct {
 
 Pane_Info :: struct {
     cursors:         [dynamic]int,
+    offset:          [2]int,
     buffer_filepath: string,
     font_size:       int,
     index:           int,
@@ -89,9 +90,11 @@ desktop_init :: proc() {
         buffer_found := false
         pane_info := pop(&info.panes_to_open)
         new_pane := pane_create()
+        flag_pane(new_pane, {.Restored_Recently})
 
         new_pane.local_font_size = f32(pane_info.font_size)
-        new_pane.cursor_moved = true
+        new_pane.x_offset = pane_info.offset.x
+        new_pane.y_offset = pane_info.offset.y
 
         if pane_info.buffer_filepath != "" {
             for buffer in open_buffers {
@@ -104,11 +107,10 @@ desktop_init :: proc() {
         }
 
         if buffer_found {
-            // TODO(nawe) need to fix this by taking the length of the buffer
-            //clear(&new_pane.cursors)
-            //for cursor in pane_info.cursors {
-            //    add_cursor(new_pane, clamp(cursor, 0, len(new_pane.buffer.original_source.buf)))
-            //}
+            clear(&new_pane.cursors)
+            for cursor in pane_info.cursors {
+                add_cursor(new_pane, cursor)
+            }
         }
 
         delete(pane_info.cursors)
@@ -161,6 +163,9 @@ desktop_save :: proc() {
             strings.write_string(&result, fmt.tprintf("{},", cursor.pos))
         }
         strings.write_string(&result, "\n")
+
+        strings.write_string(&result, "offset=")
+        strings.write_string(&result, fmt.tprintf("{},{}\n", pane.x_offset, pane.y_offset))
 
         if pane.buffer.filepath != "" {
             strings.write_string(&result, fmt.tprintf("buffer_filepath={}\n", pane.buffer.filepath))
@@ -269,6 +274,12 @@ parse_key_value :: proc(p: ^Desktop_File_Parser, key_value: []string) {
                 _v, ok := strconv.parse_int(c)
                 if ok do append(&pane_info.cursors, _v)
             }
+        case "offset":
+            offsets := strings.split(value, ",", context.temp_allocator)
+            _vx, okx := strconv.parse_int(offsets[0])
+            _vy, oky := strconv.parse_int(offsets[1])
+            if okx do pane_info.offset.x = _vx
+            if oky do pane_info.offset.y = _vy
         case "buffer_filepath":
             pane_info.buffer_filepath = value
         case "font_size":

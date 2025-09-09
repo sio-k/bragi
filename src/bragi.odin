@@ -6,7 +6,7 @@ import "core:crypto"
 import "core:fmt"
 import "core:log"
 import "core:mem"
-import "core:os"
+import "core:os/os2"
 import "core:time"
 
 when BRAGI_DEBUG {
@@ -49,7 +49,7 @@ frame_delta_time:      time.Duration
 DEFAULT_SETTINGS_DATA :: #load(RUN_TREE_DIR + "/settings.bragi")
 SETTINGS_FILENAME     :: "settings.bragi"
 
-settings_file: os.Handle
+settings_file: ^os2.File
 settings:      Settings
 colorscheme:   map[Face_Color]Color
 
@@ -104,7 +104,7 @@ main :: proc() {
 
     bragi_allocator = context.allocator
 
-    curr_working_dir = os.get_current_directory()
+    curr_working_dir, _ = os2.get_executable_path(bragi_allocator)
 
     settings_init()
     platform_init()

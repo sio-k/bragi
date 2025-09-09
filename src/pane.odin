@@ -18,8 +18,9 @@ GUTTER_LINE_NUMBER_JUSTIFY :: 2
 Pane_Flags :: bit_set[Pane_Flag; u8]
 
 Pane_Flag :: enum u8 {
-    Line_Wrappings    = 0,
-    Need_Full_Repaint = 1,
+    Line_Wrappings        = 0,
+    Need_Full_Repaint     = 1,
+    Restored_Recently     = 2, // makes some sanity checks on restore
 }
 
 Translation :: enum u16 {
@@ -123,6 +124,8 @@ update_and_draw_panes :: proc() {
     for pane in open_panes {
         assert(pane.buffer != nil)
         assert(len(pane.cursors) > 0)
+
+        maybe_sanitize_pane(pane)
 
         if pane.cursor_moved {
             pane.cursor_moved = false
@@ -311,6 +314,29 @@ flag_pane :: #force_inline proc(pane: ^Pane, flags: Pane_Flags) {
 
 unflag_pane :: #force_inline proc(pane: ^Pane, flags: Pane_Flags) {
     pane.flags -= flags
+}
+
+maybe_sanitize_pane :: proc(pane: ^Pane) {
+    if .Restored_Recently not_in pane.flags do return
+
+    unflag_pane(pane, {.Restored_Recently})
+    lines := get_lines_array(pane)
+
+    for &cursor in pane.cursors {
+        cursor.pos = clamp(cursor.pos, 0, buffer_len(pane.buffer))
+        cursor.sel = cursor.pos
+        cursor.last_column = -1
+    }
+
+    if .Line_Wrappings in pane.flags {
+        pane.x_offset = 0
+    }
+
+    if len(lines) > 2 && pane.y_offset > len(lines) - 1 {
+        pane.y_offset = len(lines) - 1
+    } else {
+        pane.y_offset = 0
+    }
 }
 
 add_cursor :: proc(pane: ^Pane, pos := 0) -> ^Cursor {

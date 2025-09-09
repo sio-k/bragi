@@ -167,15 +167,31 @@ buffer_index :: proc(buffer: ^Buffer) -> int {
     unreachable()
 }
 
+buffer_len :: proc(buffer: ^Buffer) -> (result: int) {
+    if .Dirty not_in buffer.flags {
+        result = len(buffer.text)
+        return
+    }
+
+    for piece in buffer.pieces {
+        result += piece.length
+    }
+
+    return
+}
+
 buffer_is_readonly :: proc(buffer: ^Buffer) -> bool {
     return .Read_Only in buffer.flags
 }
 
 show_buffer_readonly_message :: proc(buffer: ^Buffer) {
+    // TODO(nawe) add a user visible message here
     log.debugf("buffer '{}' is read only", buffer.name)
 }
 
 buffer_save_as :: proc(buffer: ^Buffer, fullpath: string) {
+    assert(.Dirty not_in buffer.flags)
+
     flag_buffer(buffer, {.Modified})
 
     delete(buffer.filepath)
@@ -187,6 +203,8 @@ buffer_save_as :: proc(buffer: ^Buffer, fullpath: string) {
 }
 
 buffer_save :: proc(buffer: ^Buffer) {
+    assert(.Dirty not_in buffer.flags)
+
     if .Modified not_in buffer.flags {
         log.debug("no changes need to be saved")
         return
@@ -194,16 +212,21 @@ buffer_save :: proc(buffer: ^Buffer) {
 
     // ensure file ends in newline to be POSIX compliant
     temp_builder := strings.builder_make(context.temp_allocator)
-    buffer_len := len(buffer.text)
+    length := len(buffer.text)
     buf := buffer.text
-    if buf[buffer_len - 1] != '\n' do strings.write_byte(&temp_builder, '\n')
+    if buf[length - 1] != '\n' {
+        strings.write_byte(&temp_builder, '\n')
+    }
 
     if len(temp_builder.buf) > 0 {
         temp_str := strings.to_string(temp_builder)
-        insert_at(buffer, buffer_len, temp_str)
+        insert_at(buffer, length, temp_str)
     }
 
-    if settings.purge_trailing_whitespaces_on_save do _purge_whitespaces_from_buffer(buffer)
+    if settings.purge_trailing_whitespaces_on_save {
+        _purge_whitespaces_from_buffer(buffer)
+    }
+
     unflag_buffer(buffer, {.CRLF, .Modified})
     flag_buffer(buffer, {.Dirty})
 
