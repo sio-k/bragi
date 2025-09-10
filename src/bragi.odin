@@ -113,8 +113,8 @@ main :: proc() {
     initialize_font_related_stuff()
     DEBUG_init()
 
-    widget_init()
     desktop_init()
+    widget_reinit()
 
     bragi_running = true
 
@@ -221,7 +221,6 @@ main :: proc() {
                     continue
                 }
 
-                should_resize_window_to_mininum := false
                 should_reinit_fonts := false
                 should_resize_panes := false
                 window_in_focus = v.window_focused
@@ -234,38 +233,20 @@ main :: proc() {
                 }
 
                 if window_width != v.window_width || window_height != v.window_height {
-                    if v.window_width < MINIMUM_WINDOW_SIZE || v.window_height < MINIMUM_WINDOW_SIZE {
-                        should_resize_window_to_mininum = true
-                    }
-
-                    if v.window_width > MINIMUM_WINDOW_SIZE {
-                        window_width = v.window_width
-                    } else {
-                        window_width = MINIMUM_WINDOW_SIZE
-                    }
-
-                    if v.window_height > MINIMUM_WINDOW_SIZE {
-                        window_height = v.window_height
-                    } else {
-                        window_height = MINIMUM_WINDOW_SIZE
-                    }
-
-                    if should_resize_window_to_mininum {
-                        platform_resize_window(window_width, window_height)
-                    }
-
+                    window_width = v.window_width
+                    window_height = v.window_height
                     should_resize_panes = true
-                }
-
-                if should_resize_panes {
-                    log.debug("updating necessary textures after resizing")
-                    update_pane_layout()
-                    update_widget_layout()
                 }
 
                 if should_reinit_fonts {
                     log.debug("reinitializing fonts")
                     initialize_font_related_stuff()
+                }
+
+                if should_resize_panes {
+                    log.debug("updating necessary textures after resizing")
+                    update_pane_layout()
+                    widget_reinit()
                 }
 
                 event.handled = true

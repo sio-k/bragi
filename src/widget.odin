@@ -18,8 +18,8 @@ Save_File_As :: struct {}
 Search_In_Buffer :: struct {}
 
 Replace_In_Buffer :: struct {
-    step:           enum { step1, step2, step3 },
-    from, to:       string,
+    step:     enum { step1, step2, step3 },
+    from, to: string,
 }
 
 Widget_Action :: union {
@@ -48,7 +48,8 @@ Widget :: struct {
 
     previous_buffer:      ^Buffer,
 
-    font:                 ^Font,
+    font_regular:         ^Font,
+    font_bold:            ^Font,
     rect:                 IRect,
     y_offset:             int,
 }
@@ -81,14 +82,12 @@ Widget_Result_File :: struct {
 
 Widget_Result_Offset :: int
 
-widget_init :: proc() {
-    global_widget.font = fonts_map[.UI_Regular]
-    update_widget_layout()
-}
-
-update_widget_layout :: proc() {
-    assert(global_widget.font != nil)
-    widget_height := global_widget.font.character_height * WIDGET_HEIGHT_IN_ROWS
+widget_reinit :: proc() {
+    global_widget.font_regular = fonts_map[.UI_Regular]
+    global_widget.font_bold    = fonts_map[.UI_Bold]
+    assert(global_widget.font_regular != nil)
+    assert(global_widget.font_bold != nil)
+    widget_height := global_widget.font_regular.character_height * WIDGET_HEIGHT_IN_ROWS
     global_widget.rect = {0, window_height - widget_height, window_width, widget_height}
 }
 
@@ -691,8 +690,8 @@ update_and_draw_widget :: proc() {
         global_widget.prompt_question,
     )
 
-    font_regular := global_widget.font
-    font_bold := fonts_map[.UI_Bold]
+    font_regular := global_widget.font_regular
+    font_bold    := global_widget.font_bold
     line_height := font_regular.character_height
     left_padding := font_regular.xadvance
     results_pen := Vector2{left_padding, line_height}
