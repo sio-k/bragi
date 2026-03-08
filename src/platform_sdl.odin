@@ -16,14 +16,81 @@ import     "core:strings"
 import sdl "vendor:sdl3"
 import img "vendor:sdl3/image"
 
-window: ^sdl.Window
-renderer: ^sdl.Renderer
-
 _ :: filepath
+
+MINIMUM_WINDOW_SIZE :: 800
+DEFAULT_WINDOW_SIZE :: 1200
+
+Platform_Window :: struct {
+    window:          ^sdl.Window,   // 0B offset
+    window_width:    i32,           // 8B offset
+    window_height:   i32,           // 12B offset
+    window_id:       sdl.WindowID,  // 16B offset
+    dpi_scale:       f32,           // 20B offset
+    renderer:        ^sdl.Renderer, // 24B offset
+}                                   // size: 32B
+
+window_icon: ^sdl.Surface
+
+platform_window_init :: proc() -> (win: Platform_Window) {
+    WINDOW_FLAGS  :: sdl.WindowFlags{.RESIZABLE, .HIGH_PIXEL_DENSITY, .OPENGL}
+    // TODO: read window width and height from config
+    window_width: i32 = DEFAULT_WINDOW_SIZE
+    window_height: i32 = DEFAULT_WINDOW_SIZE
+    win.window = sdl.CreateWindow(NAME, window_width, window_height, WINDOW_FLAGS)
+    if win.window == nil {
+        log.fatal("failed to open window", sdl.GetError())
+    }
+    log.debugf("window created with driver '{}'", sdl.GetCurrentVideoDriver())
+
+    win.renderer = sdl.CreateRenderer(win.window, "opengl")
+    if win.renderer == nil {
+        log.fatal("failed to setup renderer", sdl.GetError())
+    }
+    log.debugf("renderer created with driver '{}'", sdl.GetRenderDriver(0))
+    sdl.SetRenderVSync(win.renderer, sdl.RENDERER_VSYNC_ADAPTIVE)
+
+    if !sdl.StartTextInput(win.window) {
+        log.fatal("cannot capture user input", sdl.GetError())
+    }
+
+    win.window_id = sdl.GetWindowID(win.window)
+
+    sdl.SetWindowMinimumSize(win.window, MINIMUM_WINDOW_SIZE, MINIMUM_WINDOW_SIZE)
+    sdl.RaiseWindow(win.window)
+
+    if settings.maximize_window_on_start {
+        sdl.MaximizeWindow(win.window)
+    }
+
+    base_width, base_height: i32
+    sdl.GetWindowSize(win.window, &base_width, &base_height)
+    sdl.GetWindowSizeInPixels(win.window, &win.window_width, &win.window_height)
+
+    if base_width == win.window_width && base_height == win.window_height {
+        win.dpi_scale = 1.0
+    } else {
+        win.dpi_scale = min(
+            f32(win.window_width) / f32(base_width),
+            f32(win.window_height) / f32(base_height),
+        )
+    }
+
+    window_icon_success := sdl.SetWindowIcon(win.window, window_icon)
+    if !window_icon_success {
+        log.error("failed to load window icon", sdl.GetError())
+    }
+
+    return
+}
+
+platform_window_destroy :: proc(win: Platform_Window) {
+    sdl.DestroyRenderer(win.renderer)
+    sdl.DestroyWindow(win.window)
+}
 
 platform_init :: proc() {
     profiling_start("init SDL")
-    WINDOW_FLAGS  :: sdl.WindowFlags{.RESIZABLE, .HIGH_PIXEL_DENSITY, .OPENGL}
 
     METADATA :: []struct{key, value: cstring}{
         {key = sdl.PROP_APP_METADATA_NAME_STRING,       value = NAME},
@@ -64,49 +131,8 @@ platform_init :: proc() {
         log.fatal("failed to init SDL", sdl.GetError())
     }
 
-    window = sdl.CreateWindow(NAME, window_width, window_height, WINDOW_FLAGS)
-    if window == nil {
-        log.fatal("failed to open window", sdl.GetError())
-    }
-    log.debugf("window created with driver '{}'", sdl.GetCurrentVideoDriver())
-
-    renderer = sdl.CreateRenderer(window, "opengl")
-    if renderer == nil {
-        log.fatal("failed to setup renderer", sdl.GetError())
-    }
-    log.debugf("renderer created with driver '{}'", sdl.GetRenderDriver(0))
-    sdl.SetRenderVSync(renderer, sdl.RENDERER_VSYNC_ADAPTIVE)
-
-    if !sdl.StartTextInput(window) {
-        log.fatal("cannot capture user input", sdl.GetError())
-    }
-
-    sdl.SetWindowMinimumSize(window, MINIMUM_WINDOW_SIZE, MINIMUM_WINDOW_SIZE)
-    sdl.RaiseWindow(window)
-
-    if settings.maximize_window_on_start {
-        sdl.MaximizeWindow(window)
-    }
-
-    base_width, base_height: i32
-    sdl.GetWindowSize(window, &base_width, &base_height)
-    sdl.GetWindowSizeInPixels(window, &window_width, &window_height)
-
-    if base_width == window_width && base_height == window_height {
-        dpi_scale = 1.0
-    } else {
-        dpi_scale = min(
-            f32(window_width) / f32(base_width),
-            f32(window_height) / f32(base_height),
-        )
-    }
-
     icon_data := sdl.IOFromMem(raw_data(ICON), len(ICON))
-    window_icon := img.LoadPNG_IO(icon_data)
-    window_icon_success := sdl.SetWindowIcon(window, window_icon)
-    if !window_icon_success {
-        log.error("failed to load window icon", sdl.GetError())
-    }
+    window_icon = img.LoadPNG_IO(icon_data)
 
     when ODIN_OS == .Windows {
         base_working_dir = filepath.volume_name(curr_working_dir)
@@ -122,8 +148,6 @@ platform_init :: proc() {
 
 platform_destroy :: proc() {
     log.debug("deinitializing SDL")
-    sdl.DestroyRenderer(renderer)
-    sdl.DestroyWindow(window)
     sdl.Quit()
 }
 
@@ -149,7 +173,16 @@ platform_update_events :: proc() {
     event: sdl.Event
     for sdl.PollEvent(&event) {
         #partial switch event.type {
-        case .QUIT: input_register(Event_Quit{})
+        case .QUIT:
+            // TODO (sio): just get the first window, it's going to be the correct one at this point
+            input_register(windows[0], Event_Quit{})
+
+        case .WINDOW_CLOSE_REQUESTED:
+            input_register(
+                get_window_by_id(event.window.windowID),
+                Event_Window { closed = true },
+            )
+
         case .DROP_FILE:
             filepath := string(event.drop.data)
             data, error := os2.read_entire_file_from_path(filepath, context.allocator)
@@ -158,10 +191,13 @@ platform_update_events :: proc() {
                 continue
             }
 
-            input_register(Event_Drop_File{
-                filepath = strings.clone(filepath),
-                data = data,
-            })
+            input_register(
+                get_window_by_id(event.drop.windowID),
+                Event_Drop_File{
+                    filepath = strings.clone(filepath),
+                    data = data,
+                },
+            )
         case .WINDOW_FOCUS_GAINED, .WINDOW_FOCUS_LOST, .WINDOW_MOVED, .WINDOW_RESIZED, .WINDOW_MAXIMIZED:
             // NOTE(nawe) Performance: it might be just better to
             // keep these resizes in a different list of events so
@@ -169,10 +205,11 @@ platform_update_events :: proc() {
             // done. The way to do it would be to register every
             // resize, once we get a list of not resizing on a
             // frame, we would process the last resizing.
+            window := get_window_by_id(event.window.windowID)
             wevent := Event_Window{}
             base_width, base_height: i32
-            sdl.GetWindowSize(window, &base_width, &base_height)
-            sdl.GetWindowSizeInPixels(window, &wevent.window_width, &wevent.window_height)
+            sdl.GetWindowSize(window.platform.window, &base_width, &base_height)
+            sdl.GetWindowSizeInPixels(window.platform.window, &wevent.window_width, &wevent.window_height)
             wevent.window_focused = event.type != .WINDOW_FOCUS_LOST
 
             if base_width == wevent.window_width && base_height == wevent.window_height {
@@ -184,10 +221,18 @@ platform_update_events :: proc() {
                 )
             }
 
-            input_register(wevent)
+            input_register(window, wevent)
         case .MOUSE_WHEEL:
-            mouse_state.scroll_x = event.wheel.x
-            mouse_state.scroll_y = event.wheel.y * -1
+            window := get_window_by_id(event.wheel.windowID)
+            window.mouse_state.scroll_x = event.wheel.x
+            window.mouse_state.scroll_y = event.wheel.y * -1
+            input_register(
+                window,
+                Event_Mouse{
+                    scroll_x = event.wheel.x,
+                    scroll_y = event.wheel.y * -1,
+                },
+            )
         case .KEY_DOWN:
             key := u32(sdl.GetKeyFromScancode(event.key.scancode, event.key.mod, false))
             key_without_shift := u32(sdl.GetKeyFromScancode(event.key.scancode, event.key.mod - sdl.KMOD_SHIFT, false))
@@ -226,9 +271,27 @@ platform_update_events :: proc() {
                 if .LGUI   in mods  || .RGUI   in mods  do kb_event.modifiers += {.Super}
                 if .LSHIFT in mods  || .RSHIFT in mods  do kb_event.modifiers += {.Shift}
 
-                input_register(kb_event)
+                input_register(get_window_by_id(event.key.windowID), kb_event)
             }
-        case .TEXT_INPUT: input_register(Event_Keyboard{is_text_input = true, text = string(event.text.text)})
+        case .TEXT_INPUT:
+            input_register(
+                get_window_by_id(event.text.windowID),
+                Event_Keyboard{
+                    is_text_input = true,
+                    text = string(event.text.text),
+                },
+            )
+
+        case .MOUSE_BUTTON_UP: fallthrough
+        case .MOUSE_BUTTON_DOWN:
+            if event.button.button >= (transmute(u8) Mouse_Button.Left + 1) && event.button.button <= (transmute(u8) Mouse_Button.Extra_2 + 1) {
+                ev := Event_Mouse{
+                    button = transmute(Mouse_Button) (event.button.button - 1),
+                    clicks = event.button.clicks,
+                    down = bool(event.button.down),
+                }
+                input_register(get_window_by_id(event.button.windowID), ev)
+            }
         }
     }
     profiling_end()
@@ -256,8 +319,8 @@ platform_key_name :: proc(key: u32) -> string {
     return result
 }
 
-platform_resize_window :: #force_inline proc(w, h: i32) {
-    sdl.SetWindowSize(window, w, h)
+platform_resize_window :: #force_inline proc(window: ^Window, w, h: i32) {
+    sdl.SetWindowSize(window.platform.window, w, h)
 }
 
 platform_get_config_dir :: proc() -> string {
@@ -277,11 +340,11 @@ platform_get_config_dir :: proc() -> string {
     return fmt.tprintf("{}/{}", config_dir, bragi_dir)
 }
 
-platform_get_mouse_position :: proc() -> (f32, f32) {
+platform_get_mouse_position :: proc(window: ^Window) -> (f32, f32) {
     mx, my: f32
     _ = sdl.GetMouseState(&mx, &my)
-    mx *= dpi_scale
-    my *= dpi_scale
+    mx *= window.platform.dpi_scale
+    my *= window.platform.dpi_scale
     return mx, my
 }
 

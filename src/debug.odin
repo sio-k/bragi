@@ -75,6 +75,10 @@ when BRAGI_DEBUG {
         tabs:           [len(Debug_Tab)]Rect,
         current_tab:    Debug_Tab,
         tab_pen:        Vector2,
+        mouse_click_grabbed: bool,
+
+        // TODO (sio): ability to have a debug window in any actual window
+        window: ^Window,
 
         font_xs: ^Font,
 
@@ -107,14 +111,15 @@ when BRAGI_DEBUG {
     }
 
     @(private)
-    DEBUG_init :: proc() {
+    DEBUG_init :: proc(window: ^Window) {
+        debug.window = window
         debug.rect = {10, 10, DEBUG_WINDOW_SIZE, DEBUG_WINDOW_SIZE }
-        debug.texture = texture_create(.TARGET, DEBUG_WINDOW_SIZE, DEBUG_WINDOW_SIZE)
+        debug.texture = texture_create(window, .TARGET, DEBUG_WINDOW_SIZE, DEBUG_WINDOW_SIZE)
 
-        _font_regular = fonts_map[.UI_Regular]
-        _font_small   = fonts_map[.UI_Small]
-        _font_bold    = fonts_map[.UI_Bold]
-        _font_icons   = fonts_map[.Icons]
+        _font_regular = window.fonts_map[.UI_Regular]
+        _font_small   = window.fonts_map[.UI_Small]
+        _font_bold    = window.fonts_map[.UI_Bold]
+        _font_icons   = window.fonts_map[.Icons]
 
         _line_height  = _font_bold.character_height
         _title_height = _line_height + TITLE_PADDING
@@ -122,7 +127,7 @@ when BRAGI_DEBUG {
 
         debug.ft_lowest = 999
 
-        debug.font_xs = fonts_map[.UI_XSmall]
+        debug.font_xs = window.fonts_map[.UI_XSmall]
 
         debug.buttons[.Slow_Frames] = {
             on        = true,
@@ -148,7 +153,7 @@ when BRAGI_DEBUG {
                 if !debug.active do return false
 
                 is_in_tab :: proc() -> (int, bool) {
-                    mx, my := platform_get_mouse_position()
+                    mx, my := platform_get_mouse_position(debug.window)
 
                     for tab, index in debug.tabs {
                         x1, x2 := tab.x, tab.x + tab.w
@@ -162,7 +167,7 @@ when BRAGI_DEBUG {
                 }
 
                 is_in_title_bar :: proc() -> bool {
-                    mx, my := platform_get_mouse_position()
+                    mx, my := platform_get_mouse_position(debug.window)
                     r := debug.rect
                     button_rect := debug.buttons[.Window_Transparency].rect
                     x1, x2 := r.x, r.x + r.w - (r.w - button_rect.x)
@@ -171,7 +176,7 @@ when BRAGI_DEBUG {
                 }
 
                 is_in_button :: proc() -> (bool, Debug_Button_Name) {
-                    mx, my := platform_get_mouse_position()
+                    mx, my := platform_get_mouse_position(debug.window)
                     r := debug.rect
 
                     for button, name in debug.buttons {
@@ -184,6 +189,18 @@ when BRAGI_DEBUG {
                     }
 
                     return false, .Undefined
+                }
+
+                is_in_window :: proc() -> bool {
+                    mx, my := platform_get_mouse_position(debug.window)
+                    r := debug.rect
+                    return mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h
+                }
+
+                if debug.mouse_click_grabbed && !v.down {
+                    debug.mouse_click_grabbed = false
+                    debug.grabbed = false
+                    return true
                 }
 
                 if v.scroll_y != 0 {
@@ -204,6 +221,7 @@ when BRAGI_DEBUG {
                 }
 
                 if debug.grabbed && !v.down && v.button == .Left {
+                    debug.mouse_click_grabbed = true
                     debug.grabbed = false
                     return true
                 }
@@ -211,6 +229,7 @@ when BRAGI_DEBUG {
                 if index, ok := is_in_tab(); ok {
                     if v.down && v.button == .Left {
                         debug.current_tab = Debug_Tab(index)
+                        debug.mouse_click_grabbed = true
                         return true
                     }
                 }
@@ -218,10 +237,12 @@ when BRAGI_DEBUG {
                 if is_in_title_bar() && v.down {
                     if v.button == .Left {
                         if v.clicks > 1 {
+                            debug.mouse_click_grabbed = true
                             debug.minimized = !debug.minimized
                             return true
                         } else {
-                            mx, my := platform_get_mouse_position()
+                            debug.mouse_click_grabbed = true
+                            mx, my := platform_get_mouse_position(debug.window)
                             debug.grabbed = true
                             debug.grab_point.x = mx - debug.rect.x
                             debug.grab_point.y = my - debug.rect.y
@@ -235,8 +256,11 @@ when BRAGI_DEBUG {
                     button := &debug.buttons[name]
                     button.on = !button.on
                     if button.on_toggle != nil do button.on_toggle(button.on)
+                    debug.mouse_click_grabbed = true
                     return true
                 }
+
+                return is_in_window() || debug.mouse_click_grabbed
             }
             case Event_Keyboard:
             if v.key_code == .K_F9 {
@@ -263,7 +287,7 @@ when BRAGI_DEBUG {
         set_transparency(debug.texture, debug.buttons[.Window_Transparency].on ? 0.5 : 1.0)
 
         if debug.grabbed {
-            mx, my := platform_get_mouse_position()
+            mx, my := platform_get_mouse_position(debug.window)
             debug.rect.x = mx - debug.grab_point.x
             debug.rect.y = my - debug.grab_point.y
         }
@@ -275,7 +299,7 @@ when BRAGI_DEBUG {
             debug.snapshot_index = 0
         }
 
-        debug.ft_current = time.duration_milliseconds(frame_delta_time)
+        debug.ft_current = time.duration_milliseconds(debug.window.frame_delta_time)
         debug.ft_highest = max(debug.ft_current, debug.ft_highest)
         debug.ft_lowest  = min(debug.ft_current, debug.ft_lowest)
         debug.fps_current = f32(1000/debug.ft_current)
@@ -292,43 +316,46 @@ when BRAGI_DEBUG {
     DEBUG_draw :: proc() {
         if !debug.active do return
 
-        set_target(debug.texture)
-        set_custom_color(DEBUG_COLOR_BACKGROUND_LIGHT)
-        prepare_for_drawing()
+        set_target(debug.window, debug.texture)
+        set_custom_color(debug.window, DEBUG_COLOR_BACKGROUND_LIGHT)
+        prepare_for_drawing(debug.window)
 
         DEBUG_draw_window_content()
         DEBUG_draw_heading_content()
 
-        set_target()
+        set_target(debug.window)
         debug.rect.h = DEBUG_WINDOW_SIZE
         if debug.minimized {
             debug.rect.h = f32(_title_height)
         }
         src_rect := Rect{0, 0, debug.rect.w, debug.rect.h}
-        draw_texture(debug.texture, &src_rect, &debug.rect)
+        draw_texture(debug.window, debug.texture, &src_rect, &debug.rect)
     }
 
     DEBUG_draw_heading_content :: proc() {
-        set_custom_color(DEBUG_COLOR_BACKGROUND_LIGHT)
-        draw_rect(1, 1, i32(debug.rect.w) - 1, _heading_section_height-1)
+        set_custom_color(debug.window, DEBUG_COLOR_BACKGROUND_LIGHT)
+        draw_rect(
+            debug.window,
+            1, 1, i32(debug.rect.w) - 1, _heading_section_height - 1,
+        )
 
         { // heading
             w, h := i32(debug.rect.w)-1, i32(debug.rect.h)-1
             h2 := _title_height // below the title
-            set_custom_color(DEBUG_COLOR_BACKGROUND_DARK)
-            draw_rect(0, 0, w, h2)
-            set_custom_color(DEBUG_COLOR_BORDER)
-            draw_line(0, 0, 0, h)
-            draw_line(0, 0, w, 0)
-            draw_line(w, 0, w, h)
-            draw_line(0, h, w, h)
-            draw_line(0, h2, w, h2)
-            set_custom_color(DEBUG_COLOR_FOREGROUND, _font_bold)
-            set_custom_color(DEBUG_COLOR_FOREGROUND, _font_icons)
+            set_custom_color(debug.window, DEBUG_COLOR_BACKGROUND_DARK)
+            draw_rect(debug.window, 0, 0, w, h2)
+            set_custom_color(debug.window, DEBUG_COLOR_BORDER)
+            draw_line(debug.window, 0, 0, 0, h)
+            draw_line(debug.window, 0, 0, w, 0)
+            draw_line(debug.window, w, 0, w, h)
+            draw_line(debug.window, 0, h, w, h)
+            draw_line(debug.window, 0, h2, w, h2)
+            set_custom_color(debug.window, DEBUG_COLOR_FOREGROUND, _font_bold)
+            set_custom_color(debug.window, DEBUG_COLOR_FOREGROUND, _font_icons)
             pen_for_title := Vector2{DEBUG_SECTION_PADDING, 3}
             title_icon : rune = debug.minimized ? 0xf0d8 : 0xf0d7
-            pen_for_title = draw_text(_font_icons, pen_for_title, icon_to_string(title_icon))
-            draw_text(_font_bold, pen_for_title, "Bragi Debugging Tools")
+            pen_for_title = draw_text(debug.window, _font_icons, pen_for_title, icon_to_string(title_icon))
+            draw_text(debug.window, _font_bold, pen_for_title, "Bragi Debugging Tools")
 
             pen_for_toggle := Vector2{i32(DEBUG_right_edge()), _title_height}
             DEBUG_draw_toggle_switch(pen_for_toggle, .Window_Transparency, "transparency")
@@ -341,28 +368,54 @@ when BRAGI_DEBUG {
                 tab_name := fmt.tprintf("   {}   ", reflect.enum_string(tab))
                 x := pen_for_tabs.x
                 y := pen_for_tabs.y
-                w := prepare_text(_font_bold, tab_name)
+                w := prepare_text(debug.window, _font_bold, tab_name)
                 h := _font_bold.character_height
                 if debug.current_tab == tab {
-                    set_custom_color(DEBUG_COLOR_BUTTON_ACTIVE_BG)
-                    set_custom_color(DEBUG_COLOR_BUTTON_ACTIVE_FG, _font_bold)
+                    set_custom_color(
+                        debug.window,
+                        DEBUG_COLOR_BUTTON_ACTIVE_BG,
+                    )
+                    set_custom_color(
+                        debug.window,
+                        DEBUG_COLOR_BUTTON_ACTIVE_FG,
+                        _font_bold,
+                    )
                 } else {
-                    set_custom_color(DEBUG_COLOR_BUTTON_INACTIVE_BG)
-                    set_custom_color(DEBUG_COLOR_BUTTON_INACTIVE_FG, _font_bold)
+                    set_custom_color(
+                        debug.window,
+                        DEBUG_COLOR_BUTTON_INACTIVE_BG,
+                    )
+                    set_custom_color(
+                        debug.window,
+                        DEBUG_COLOR_BUTTON_INACTIVE_FG,
+                        _font_bold,
+                    )
                 }
 
-                mx, my := platform_get_mouse_position()
+                mx, my := platform_get_mouse_position(debug.window)
                 x1, y1 := debug.rect.x + f32(x), debug.rect.y + f32(y)
                 x2, y2 := x1 + f32(w), y1 + f32(h)
 
                 if mx >= x1 && mx <= x2 && my >= y1 && my <= y2 {
-                    set_custom_color(DEBUG_COLOR_BUTTON_ACTIVE_FG, _font_bold)
+                    set_custom_color(
+                        debug.window,
+                        DEBUG_COLOR_BUTTON_ACTIVE_FG,
+                        _font_bold,
+                    )
                 }
 
-                draw_rect(x, y, w, h, true)
-                pen_for_tabs = draw_text(_font_bold, pen_for_tabs, tab_name)
+                draw_rect(debug.window, x, y, w, h, true)
+                pen_for_tabs = draw_text(
+                    debug.window,
+                    _font_bold,
+                    pen_for_tabs,
+                    tab_name,
+                )
                 debug.tabs[index] = {
-                    debug.rect.x + f32(x), debug.rect.y + f32(y), f32(w), f32(h),
+                    debug.rect.x + f32(x),
+                    debug.rect.y + f32(y),
+                    f32(w),
+                    f32(h),
                 }
             }
         }
@@ -370,15 +423,24 @@ when BRAGI_DEBUG {
         { // frame info
             pen_for_frame_info := Vector2{DEBUG_SECTION_PADDING, (_title_height * 2)}
             current_frame_str := fmt.tprintf("Frame #{}\n", debug.current_frame)
-            set_custom_color(DEBUG_COLOR_FOREGROUND, _font_bold)
-            draw_text(_font_bold, pen_for_frame_info, current_frame_str)
+            set_custom_color(debug.window, DEBUG_COLOR_FOREGROUND, _font_bold)
+            draw_text(
+                debug.window,
+                _font_bold,
+                pen_for_frame_info,
+                current_frame_str,
+            )
             pen_for_frame_info.y += _font_bold.character_height
 
             pen_for_toggle := Vector2{i32(DEBUG_right_edge()), pen_for_frame_info.y}
             DEBUG_draw_toggle_switch(pen_for_toggle, .Slow_Frames, "slow frames")
 
-            set_custom_color(DEBUG_COLOR_BORDER)
-            draw_line(0, pen_for_frame_info.y, i32(debug.rect.w), pen_for_frame_info.y)
+            set_custom_color(debug.window, DEBUG_COLOR_BORDER)
+            draw_line(
+                debug.window,
+                0, pen_for_frame_info.y,
+                i32(debug.rect.w), pen_for_frame_info.y,
+            )
         }
     }
 
@@ -422,14 +484,15 @@ when BRAGI_DEBUG {
                 height := proportion * GRAPH_MAX_HEIGHT
 
                 if height >= avg_fps_line_height - 1 {
-                    set_custom_color(DEBUG_COLOR_GREEN)
+                    set_custom_color(debug.window, DEBUG_COLOR_GREEN)
                 } else if height < avg_fps_line_height*0.75 {
-                    set_custom_color(DEBUG_COLOR_RED)
+                    set_custom_color(debug.window, DEBUG_COLOR_RED)
                 } else {
-                    set_custom_color(DEBUG_COLOR_YELLOW)
+                    set_custom_color(debug.window, DEBUG_COLOR_YELLOW)
                 }
 
                 draw_rect_f32(
+                    debug.window,
                     graph_left + f32(index) * bar_width, f32(debug.tab_pen.y),
                     bar_width, -height,
                 )
@@ -439,8 +502,9 @@ when BRAGI_DEBUG {
             FPS_LINE_HEIGHT     :: 2
 
             // snapshot indicator
-            set_custom_color(DEBUG_COLOR_BORDER)
+            set_custom_color(debug.window, DEBUG_COLOR_BORDER)
             draw_rect_f32(
+                debug.window,
                 graph_left + f32(debug.snapshot_index + 1) * bar_width, f32(debug.tab_pen.y),
                 SNAPSHOT_LINE_WIDTH, -GRAPH_MAX_HEIGHT,
             )
@@ -450,31 +514,53 @@ when BRAGI_DEBUG {
             min_line_pen := Vector2{debug.tab_pen.x, debug.tab_pen.y - i32(min_fps_line_height)}
             fps_line_width := i32(DEBUG_right_edge())
 
-            set_custom_color(DEBUG_COLOR_BLUE)
-            set_custom_color(DEBUG_COLOR_BLUE, _font_small)
+            set_custom_color(debug.window, DEBUG_COLOR_BLUE)
+            set_custom_color(debug.window, DEBUG_COLOR_BLUE, _font_small)
             max_fps_str := fmt.tprintf("Max FPS: %.2f", debug.fps_max)
             max_text_pen := max_line_pen
             max_text_pen.x = fps_line_width - _font_small.em_width * i32(len(max_fps_str))
             max_text_pen.y -= _font_small.character_height
-            draw_text(_font_small, max_text_pen, max_fps_str)
-            draw_rect(max_line_pen.x, max_line_pen.y, fps_line_width, FPS_LINE_HEIGHT)
+            draw_text(debug.window, _font_small, max_text_pen, max_fps_str)
+            draw_rect(
+                debug.window,
+                max_line_pen.x,
+                max_line_pen.y,
+                fps_line_width,
+                FPS_LINE_HEIGHT,
+            )
 
-            set_custom_color(DEBUG_COLOR_ORANGE)
-            set_custom_color(DEBUG_COLOR_ORANGE, _font_small)
+            set_custom_color(debug.window, DEBUG_COLOR_ORANGE)
+            set_custom_color(debug.window, DEBUG_COLOR_ORANGE, _font_small)
             min_fps_str := fmt.tprintf("Min FPS: %.2f    ", debug.fps_min)
             min_text_pen := min_line_pen
             min_text_pen.x = max_text_pen.x - _font_small.em_width * i32(len(min_fps_str))
             min_text_pen.y -= _font_small.character_height
-            draw_text(_font_small, min_text_pen, min_fps_str)
-            draw_rect(min_line_pen.x, min_line_pen.y, fps_line_width, FPS_LINE_HEIGHT)
+            draw_text(debug.window, _font_small, min_text_pen, min_fps_str)
+            draw_rect(
+                debug.window,
+                min_line_pen.x,
+                min_line_pen.y,
+                fps_line_width,
+                FPS_LINE_HEIGHT,
+            )
 
-            set_custom_color(DEBUG_COLOR_FOREGROUND)
-            set_custom_color(DEBUG_COLOR_FOREGROUND, _font_regular)
+            set_custom_color(debug.window, DEBUG_COLOR_FOREGROUND)
+            set_custom_color(
+                debug.window,
+                DEBUG_COLOR_FOREGROUND,
+                _font_regular,
+            )
             avg_text_pen := avg_line_pen
             avg_text_pen.y -= _font_regular.character_height
             avg_fps_str := fmt.tprintf("Average FPS: %.2f", debug.fps_avg)
-            draw_text(_font_regular, avg_text_pen, avg_fps_str)
-            draw_rect(avg_line_pen.x, avg_line_pen.y, fps_line_width, FPS_LINE_HEIGHT)
+            draw_text(debug.window, _font_regular, avg_text_pen, avg_fps_str)
+            draw_rect(
+                debug.window,
+                avg_line_pen.x,
+                avg_line_pen.y,
+                fps_line_width,
+                FPS_LINE_HEIGHT,
+            )
         }
 
         { // frametime
@@ -482,23 +568,34 @@ when BRAGI_DEBUG {
 
             LINE_CHART_HEIGHT :: 40
 
-            debug.tab_pen = draw_text(_font_bold, debug.tab_pen, "Frametimes\n")
+            debug.tab_pen = draw_text(
+                debug.window,
+                _font_bold,
+                debug.tab_pen,
+                "Frametimes\n",
+            )
             debug.tab_pen.y += 10
 
-            set_custom_color(DEBUG_COLOR_BACKGROUND_DARK, _font_regular)
+            set_custom_color(debug.window, DEBUG_COLOR_BACKGROUND_DARK, _font_regular)
 
-            set_custom_color(DEBUG_COLOR_BLUE)
+            set_custom_color(debug.window, DEBUG_COLOR_BLUE)
             high_frametime_str := fmt.tprintf("%.2fms", debug.ft_highest)
             high_frametime_pen := debug.tab_pen
             high_frametime_pen.x = i32(DEBUG_right_edge()) - i32(len(high_frametime_str)) * _font_regular.em_width
             high_frametime_pen.y += 2
             draw_rect(
+                debug.window,
                 debug.tab_pen.x, debug.tab_pen.y,
                 DEBUG_WINDOW_SIZE - debug.tab_pen.x * 2, LINE_CHART_HEIGHT,
             )
-            draw_text(_font_regular, high_frametime_pen, high_frametime_str)
+            draw_text(
+                debug.window,
+                _font_regular,
+                high_frametime_pen,
+                high_frametime_str,
+            )
 
-            set_custom_color(DEBUG_COLOR_GREEN)
+            set_custom_color(debug.window, DEBUG_COLOR_GREEN)
             curr_proportion := f32(max(debug.ft_current/debug.ft_highest, 0.25))
             curr_proportion = f32(min(curr_proportion, 0.75))
             curr_frametime_str := fmt.tprintf("%.2fms", debug.ft_current)
@@ -506,31 +603,43 @@ when BRAGI_DEBUG {
             curr_frametime_pen.x = i32(debug.rect.w * curr_proportion) - i32(len(curr_frametime_str)) * _font_regular.em_width
             curr_frametime_pen.y += 2
             draw_rect(
+                debug.window,
                 debug.tab_pen.x, debug.tab_pen.y,
                 i32(DEBUG_WINDOW_SIZE * curr_proportion), LINE_CHART_HEIGHT,
             )
-            draw_text(_font_regular, curr_frametime_pen, curr_frametime_str)
+            draw_text(
+                debug.window,
+                _font_regular,
+                curr_frametime_pen,
+                curr_frametime_str,
+            )
 
-            set_custom_color(DEBUG_COLOR_YELLOW)
+            set_custom_color(debug.window, DEBUG_COLOR_YELLOW)
             low_proportion := 0.15
             low_frametime_str := fmt.tprintf("%.2fms", debug.ft_lowest)
             low_frametime_pen := debug.tab_pen
             low_frametime_pen.x = i32(DEBUG_WINDOW_SIZE * low_proportion) - i32(len(low_frametime_str)) * _font_regular.em_width
             low_frametime_pen.y += 2
             draw_rect(
+                debug.window,
                 debug.tab_pen.x, debug.tab_pen.y,
                 i32(DEBUG_WINDOW_SIZE * low_proportion), LINE_CHART_HEIGHT,
             )
-            draw_text(_font_regular, low_frametime_pen, low_frametime_str)
+            draw_text(
+                debug.window,
+                _font_regular,
+                low_frametime_pen,
+                low_frametime_str,
+            )
         }
     }
 
     DEBUG_draw_buffer_tab :: proc() {
-        mx, my := platform_get_mouse_position()
+        mx, my := platform_get_mouse_position(debug.window)
         pane_index := -1
         pane_rect: IRect
 
-        for pane, index in open_panes {
+        for pane, index in debug.window.open_panes {
             left := f32(pane.rect.x)
             right := left + f32(pane.rect.w)
             up := f32(pane.rect.y)
@@ -549,10 +658,25 @@ when BRAGI_DEBUG {
             "Relative Mouse X: {} Y: {}\n", mx - f32(pane_rect.x), my - f32(pane_rect.y),
         )
 
-        set_custom_color(DEBUG_COLOR_FOREGROUND, _font_regular)
-        debug.tab_pen = draw_text(_font_regular, debug.tab_pen, mouse_pos_str)
-        debug.tab_pen = draw_text(_font_regular, debug.tab_pen, pane_pos_at_mouse_str)
-        debug.tab_pen = draw_text(_font_regular, debug.tab_pen, mouse_rel_to_pane)
+        set_custom_color(debug.window, DEBUG_COLOR_FOREGROUND, _font_regular)
+        debug.tab_pen = draw_text(
+            debug.window,
+            _font_regular,
+            debug.tab_pen,
+            mouse_pos_str,
+        )
+        debug.tab_pen = draw_text(
+            debug.window,
+            _font_regular,
+            debug.tab_pen,
+            pane_pos_at_mouse_str,
+        )
+        debug.tab_pen = draw_text(
+            debug.window,
+            _font_regular,
+            debug.tab_pen,
+            mouse_rel_to_pane,
+        )
     }
 
     DEBUG_draw_memory_tab :: proc() {
@@ -563,14 +687,34 @@ when BRAGI_DEBUG {
         alloc_current := tracking_allocator.current_memory_allocated
         alloc_current_str := fmt.tprintf("Current:  {}\n", (alloc_current/1024.)/1024.)
 
-        set_custom_color(DEBUG_COLOR_FOREGROUND, _font_regular)
-        debug.tab_pen = draw_text(_font_regular, debug.tab_pen, alloc_amount_str)
-        debug.tab_pen = draw_text(_font_regular, debug.tab_pen, alloc_count_str)
-        debug.tab_pen = draw_text(_font_regular, debug.tab_pen, alloc_current_str)
+        set_custom_color(debug.window, DEBUG_COLOR_FOREGROUND, _font_regular)
+        debug.tab_pen = draw_text(
+            debug.window,
+            _font_regular,
+            debug.tab_pen,
+            alloc_amount_str,
+        )
+        debug.tab_pen = draw_text(
+            debug.window,
+            _font_regular,
+            debug.tab_pen,
+            alloc_count_str,
+        )
+        debug.tab_pen = draw_text(
+            debug.window,
+            _font_regular,
+            debug.tab_pen,
+            alloc_current_str,
+        )
 
         for _, value in tracking_allocator.allocation_map {
             alloc_detail_str := fmt.tprintf("{}: {}\n", value.location.procedure, value.size)
-            debug.tab_pen = draw_text(_font_regular, debug.tab_pen, alloc_detail_str)
+            debug.tab_pen = draw_text(
+                debug.window,
+                _font_regular,
+                debug.tab_pen,
+                alloc_detail_str,
+            )
         }
     }
 
@@ -597,17 +741,22 @@ when BRAGI_DEBUG {
         button.rect = {x, y, SWITCH_BG_WIDTH, SWITCH_BG_HEIGHT}
 
         // background
-        set_custom_color(DEBUG_COLOR_BUTTON_INACTIVE_BG)
+        set_custom_color(debug.window, DEBUG_COLOR_BUTTON_INACTIVE_BG)
         draw_rect_f32(
+            debug.window,
             button.rect.x, button.rect.y,
             button.rect.w, button.rect.h,
         )
 
         // foreground
-        set_custom_color(button.on ? DEBUG_COLOR_GREEN : DEBUG_COLOR_RED)
+        set_custom_color(
+            debug.window,
+            button.on ? DEBUG_COLOR_GREEN : DEBUG_COLOR_RED,
+        )
         left := button.rect.x + INDICATOR_WIDTH/2
         right := button.rect.x + button.rect.w - INDICATOR_WIDTH - INDICATOR_WIDTH/2
         draw_rect_f32(
+            debug.window,
             button.on ? right : left, button.rect.y + INDICATOR_HEIGHT/2,
             INDICATOR_WIDTH, INDICATOR_HEIGHT,
         )
@@ -616,8 +765,13 @@ when BRAGI_DEBUG {
             font_for_label := debug.font_xs
             pen_for_label := Vector2{i32(button.rect.x), i32(button.rect.y)}
             pen_for_label.x -= font_for_label.em_width * i32(len(label) + 1)
-            set_custom_color(DEBUG_COLOR_BORDER, font_for_label)
-            pen_after_label := draw_text(font_for_label, pen_for_label, label)
+            set_custom_color(debug.window, DEBUG_COLOR_BORDER, font_for_label)
+            pen_after_label := draw_text(
+                debug.window,
+                font_for_label,
+                pen_for_label,
+                label,
+            )
             button.rect.x = f32(pen_for_label.x)
             button.rect.w += f32(pen_after_label.x - pen_for_label.x + font_for_label.em_width)
         }
@@ -647,7 +801,7 @@ when BRAGI_DEBUG {
     }
 } else {
     @(private)
-    DEBUG_init         :: proc() {}
+    DEBUG_init         :: proc(window: ^Window) {}
     @(private)
     DEBUG_destroy      :: proc() {}
     @(private)

@@ -1,5 +1,13 @@
 package main
 
+import rt "base:runtime"
+
+import "core:fmt"
+import "core:log"
+import "core:os/os2"
+
+import "project"
+
 Color :: distinct [4]u8
 
 Face_Color :: enum u8 {
@@ -73,9 +81,15 @@ Settings :: struct {
     modeline_position:                                      Modeline_Position,
 }
 
+get_settings_filepath :: proc() -> string {
+    return fmt.tprintf("{}/{}", platform_get_config_dir(), "settings.bragi")
+}
+
 settings_init :: proc() {
-    settings.editor_font_size        = 24
-    settings.ui_font_size            = 20
+//    settings.editor_font_size        = 24
+//    settings.ui_font_size            = 20
+    settings.editor_font_size = 16
+    settings.ui_font_size = 16
     settings.cursor_is_a_block       = true
     settings.cursor_width            = 2
     settings.mouse_scroll_threshold  = 5
@@ -131,6 +145,109 @@ settings_init :: proc() {
     colorscheme[.ui_modeline_inactive_foreground]   = hex_to_color(0x616161)
 
     _settings_setup_basic_bragi_keybindings()
+
+    rt.DEFAULT_TEMP_ALLOCATOR_TEMP_GUARD()
+    settings_file_contents, settings_ok := project.read_file(get_settings_filepath())
+    if settings_ok {
+        settings_struct_info := type_info_of(Settings).variant.(rt.Type_Info_Named).base.variant.(rt.Type_Info_Struct)
+        settings_bytes := transmute([^]u8) &settings
+        for i: i32 = 0; i < settings_struct_info.field_count; i += 1 {
+            name := settings_struct_info.names[i]
+            offset := settings_struct_info.offsets[i]
+            field_addr := &(settings_bytes[offset])
+            type := settings_struct_info.types[i]
+            v, v_ok := settings_file_contents[name]
+            if !v_ok {
+                log.debugf(
+                    "settings file: didn't find a setting for %v (type %v)",
+                    name, type,
+                )
+                continue
+            }
+            switch type.id {
+            case int:
+                target := transmute(^int) field_addr
+                if v.kind != .Num {
+                    log.errorf("Invalid value in settings for field %v (should be number): %v", name, v)
+                } else {
+                    target^ = int(v.num)
+                }
+            case bool:
+                target := transmute(^bool) field_addr
+                if v.kind != .B {
+                    log.errorf("Invalid value in settings for field %v (should be bool): %v", name, v)
+                } else {
+                    target^ = v.b
+                }
+            case Tab_Character:
+                target := transmute(^Tab_Character) field_addr
+                if v.str == "space" {
+                    target^ = .space
+                } else if v.str == "tab" {
+                    target^ = .tab
+                } else {
+                    log.errorf("Invalid value in settings for tab character: %v", v)
+                }
+            case Modeline_Position:
+                target := transmute(^Modeline_Position) field_addr
+                if v.str == "bottom" {
+                    target^ = .bottom
+                } else if v.str == "top" {
+                    target^ = .top
+                } else {
+                    log.errorf("Invalid value in settings for modeline position: %v", v)
+                }
+            case:
+                log.errorf("Don't know how to handle type %v in settings", type)
+            }
+        }
+        log.debugf("settings loaded from file settings.bragi")
+
+        // load keybinds
+        keybinds, keybinds_ok := settings_file_contents["keys_global"]
+        if keybinds_ok && keybinds.kind == .List {
+            for keybindvalue in keybinds.list {
+                if keybindvalue.kind != .List || len(keybindvalue.list) < 2 {
+                    log.errorf("keys_global keybind values must be lists of strings, found non-list or too short list %v", keybindvalue)
+                    continue
+                }
+                action := keybindvalue.list[0]
+                bind := keybindvalue.list[1]
+                if action.kind != .Str || bind.kind != .Str {
+                    log.errorf("keys_global must contain all strings. Found non strings action %v, bind %v", action, bind)
+                    continue
+                }
+                command_enum_info := type_info_of(Command).variant.(rt.Type_Info_Named).base.variant.(rt.Type_Info_Enum)
+                command: Command
+                command_ok := false
+                for i := 0; i < len(command_enum_info.names); i += 1 {
+                    if command_enum_info.names[i] == action.str {
+                        command = Command(command_enum_info.values[i])
+                        command_ok = true
+                        break
+                    }
+                }
+                if command_ok {
+                    commands_map[bind.str] = command
+                } else {
+                    log.errorf(
+                        "can't assign %v to command %v: command not found",
+                        bind.str,
+                        action.str,
+                    )
+                }
+            }
+
+            log.debugf("keybinds loaded from file settings.bragi")
+        } else if keybinds_ok && keybinds.kind != .List {
+            log.errorf(
+                "keys_global must be list format ( { \"action\", \"keybind\", }, ); currently: %v",
+                keybinds.kind
+            )
+        }
+    } else if !os2.exists(get_settings_filepath()) {
+        // TODO: write out default settings file
+    }
 }
 
 // Just the default, basic, keybindings for Bragi
@@ -150,40 +267,29 @@ _settings_setup_basic_bragi_keybindings :: proc() {
     commands_map["ALT-S"]       = .save_buffer
     commands_map["ALT-SHIFT-S"] = .save_buffer_as
 
-    commands_map["CTRL-S"]       = .search_forward
-    commands_map["CTRL-SHIFT-S"] = .search_backward
-    commands_map["CTRL-R"]       = .search_backward
+    commands_map["CTRL-G"]       = .search_forward
+    commands_map["CTRL-SHIFT-G"] = .search_backward
 
     commands_map["CTRL-1"] = .close_other_panes
     commands_map["CTRL-2"] = .close_this_pane
     commands_map["CTRL-3"] = .new_pane_to_the_right
 
-    commands_map["ALT-UP"]           = .clone_cursor_above
-    commands_map["ALT-DOWN"]         = .clone_cursor_below
-    commands_map["CTRL-L"]           = .recenter_cursor
-    commands_map["CTRL-SHIFT-TAB"]   = .prev_cursor
-    commands_map["CTRL-TAB"]         = .next_cursor
-    commands_map["CTRL-SHIFT-A"]     = .all_cursors
-
-    commands_map["CTRL-SHIFT-Q"]     = .move_beginning_of_buffer
-    commands_map["CTRL-SHIFT-E"]     = .move_end_of_buffer
+    commands_map["CTRL-PAGEUP"]      = .move_beginning_of_buffer
+    commands_map["CTRL-PAGEDOWN"]    = .move_end_of_buffer
     commands_map["CTRL-Q"]           = .move_beginning_of_line
     commands_map["CTRL-E"]           = .move_end_of_line
     commands_map["UP"]               = .move_up
     commands_map["DOWN"]             = .move_down
     commands_map["LEFT"]             = .move_left
     commands_map["RIGHT"]            = .move_right
-    commands_map["CTRL-UP"]          = .move_prev_paragraph
-    commands_map["CTRL-DOWN"]        = .move_next_paragraph
     commands_map["CTRL-LEFT"]        = .move_prev_word
     commands_map["CTRL-RIGHT"]       = .move_next_word
-    commands_map["CTRL-SHIFT-UP"]    = .move_prev_page
+    commands_map["CTRL-UP"]          = .move_prev_page
     commands_map["PAGEUP"]           = .move_prev_page
-    commands_map["CTRL-SHIFT-DOWN"]  = .move_next_page
+    commands_map["CTRL-DOWN"]        = .move_next_page
     commands_map["PAGEDOWN"]         = .move_next_page
 
-    commands_map["CTRL-A"]           = .select_all
-    commands_map["CTRL-SHIFT-Q"]     = .select_beginning_of_line
+    commands_map["CTRL-SHIFT-A"]     = .select_beginning_of_line
     commands_map["CTRL-SHIFT-E"]     = .select_end_of_line
     commands_map["SHIFT-UP"]         = .select_up
     commands_map["SHIFT-DOWN"]       = .select_down
@@ -200,75 +306,76 @@ _settings_setup_basic_bragi_keybindings :: proc() {
     commands_map["CTRL-DELETE"]      = .remove_next_word
     commands_map["ALT-D"]            = .remove_next_word
 
+    // keypad equivalents
+    // TODO (sio): we need to handle keypad arrows the same as regular arrows
+    commands_map["CTRL-KEYPAD 9"]      = .move_beginning_of_buffer
+    commands_map["CTRL-KEYPAD 3"]    = .move_end_of_buffer
+    commands_map["KEYPAD 8"]               = .move_up
+    commands_map["KEYPAD 2"]             = .move_down
+    commands_map["KEYPAD 4"]             = .move_left
+    commands_map["KEYPAD 6"]            = .move_right
+    commands_map["CTRL-KEYPAD 4"]        = .move_prev_word
+    commands_map["CTRL-KEYPAD 6"]       = .move_next_word
+    commands_map["CTRL-KEYPAD 8"]          = .move_prev_page
+    commands_map["KEYPAD 9"]           = .move_prev_page
+    commands_map["CTRL-KEYPAD 2"]        = .move_next_page
+    commands_map["KEYPAD 3"]         = .move_next_page
+    commands_map["SHIFT-KEYPAD 8"]         = .select_up
+    commands_map["SHIFT-KEYPAD 2"]       = .select_down
+    commands_map["SHIFT-KEYPAD 4"]       = .select_left
+    commands_map["SHIFT-KEYPAD 6"]      = .select_right
+    commands_map["CTRL-SHIFT-KEYPAD 4"]  = .select_prev_word
+    commands_map["CTRL-SHIFT-KEYPAD 6"] = .select_next_word
+    commands_map["KEYPAD PERIOD"]        = .remove_right
+    commands_map["CTRL-KEYPAD PERIOD"]   = .remove_next_word
+
     commands_map["TAB"]              = .indent_or_tab_stop
+    // TODO: shift-tab to insert tab stop
     commands_map["ENTER"]            = .newline_and_indent
     commands_map["SHIFT-ENTER"]      = .newline_and_indent
 
-    commands_map["CTRL-X"]           = .cut_selection
-    commands_map["CTRL-SHIFT-X"]     = .cut_line
-    commands_map["CTRL-C"]           = .copy_selection
-    commands_map["CTRL-SHIFT-C"]     = .copy_line
-    commands_map["CTRL-V"]           = .paste
-    commands_map["CTRL-SHIFT-V"]     = .paste_from_history
-
-    commands_map["CTRL-Z"]           = .undo
-    commands_map["CTRL-SHIFT-Z"]     = .redo
-
-    use_nawe_keybindings()
-}
-
-@(private="file")
-use_nawe_keybindings :: proc() {
-    commands_map["CTRL-G"]         = .quit_mode
-    commands_map["CTRL-X"]         = .modifier
-
     commands_map["CTRL-SPACE"]     = .toggle_selection_mode
 
-    commands_map["CTRL-X-B"]       = .find_buffer
+    commands_map["CTRL-B"]         = .find_buffer
     commands_map["ALT-X"]          = .find_command
-    commands_map["CTRL-X-CTRL-F"]  = .find_file
+    commands_map["CTRL-X"]         = .find_file
     commands_map["ALT-%"]          = .replace_in_buffer
 
-    commands_map["CTRL-X-K"]       = .close_current_buffer
-    commands_map["CTRL-X-CTRL-S"]  = .save_buffer
-    commands_map["CTRL-X-CTRL-W"]  = .save_buffer_as
-
-    commands_map["ALT-P"]          = .clone_cursor_above
-    commands_map["ALT-N"]          = .clone_cursor_below
-    commands_map["CTRL-L"]         = .recenter_cursor
-    commands_map["CTRL-SHIFT-TAB"] = .prev_cursor
-    commands_map["CTRL-TAB"]       = .next_cursor
-    commands_map["CTRL-SHIFT-A"]   = .all_cursors
+    commands_map["CTRL-K"]         = .close_current_buffer
+    commands_map["CTRL-S"]         = .save_buffer
+    commands_map["CTRL-SHIFT-S"]   = .save_buffer_as
 
     commands_map["ALT-<"]          = .move_beginning_of_buffer
     commands_map["ALT->"]          = .move_end_of_buffer
     commands_map["CTRL-A"]         = .move_beginning_of_line
     commands_map["CTRL-E"]         = .move_end_of_line
-    commands_map["CTRL-P"]         = .move_up
-    commands_map["CTRL-N"]         = .move_down
-    commands_map["CTRL-B"]         = .move_left
-    commands_map["CTRL-F"]         = .move_right
-    commands_map["ALT-B"]          = .move_prev_word
-    commands_map["ALT-F"]          = .move_next_word
-    commands_map["ALT-V"]          = .move_prev_page
-    commands_map["CTRL-V"]         = .move_next_page
+    commands_map["CTRL-Z"]         = .move_up
+    commands_map["CTRL-V"]         = .move_down
+    commands_map["CTRL-R"]         = .move_prev_word
+    commands_map["CTRL-F"]         = .move_next_word
+    commands_map["ALT-R"]          = .move_left
+    commands_map["ALT-F"]          = .move_right
+    commands_map["ALT-V"]          = .move_next_paragraph
+    commands_map["ALT-Z"]          = .move_prev_paragraph
 
-    commands_map["CTRL-X-CTRL-P"]  = .select_all
+//    commands_map["CTRL-X-CTRL-P"]  = .select_all
 
-    commands_map["CTRL-X-1"]       = .close_other_panes
-    commands_map["CTRL-X-0"]       = .close_this_pane
-    commands_map["CTRL-X-3"]       = .new_pane_to_the_right
-    commands_map["CTRL-X-O"]       = .other_pane
+    commands_map["CTRL-1"]         = .close_other_panes
+    commands_map["CTRL-0"]         = .close_this_pane
+//    commands_map["CTRL-2"]         = .new_pane_below
+    commands_map["CTRL-3"]         = .new_pane_to_the_right
+    commands_map["CTRL-O"]         = .other_pane
     commands_map["ALT-O"]          = .other_pane
 
-    commands_map["CTRL-W"]         = .cut_selection
+    commands_map["CTRL-W"]         = .cut_selection_or_remove_prev_word
     commands_map["ALT-W"]          = .copy_selection
     commands_map["CTRL-Y"]         = .paste
 
     commands_map["CTRL-/"]         = .undo
     commands_map["CTRL-?"]         = .redo
 
-    commands_map["CTRL-K"]         = .cut_line
+    commands_map["CTRL-N"]         = .new_window
+    commands_map["CTRL-Q"]         = .close_window
 }
 
 hex_to_color :: proc(hex: int) -> (result: Color) {

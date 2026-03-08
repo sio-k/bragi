@@ -1,0 +1,142 @@
+// This has the same syntax as a 4coder settings file
+editor_font_size = 16;
+ui_font_size = 16;
+always_wrap_lines = true;
+show_trailing_whitespaces = true;
+purge_trailing_whitespaces_on_save = true;
+cursor_is_a_block = true;
+cursor_width = 2;
+mouse_scroll_threshold = 5;
+default_tab_size = 4;
+default_tab_character = "space"; // "tab" or "space" (tab doesn't work right as yet, beware)
+derive_indentation_from_file = true;
+show_line_numbers = true;
+maximize_window_on_start = true;
+use_desktop_file = true;
+max_buffers_to_save_in_desktop = 15;
+modeline_position = "top"; // bottom or top
+hide_mouse_while_typing = false;
+
+keys_global = {
+    { "quit_mode", "ESCAPE", },
+
+    { "increase_font_size", "CTRL-+", },
+    { "decrease_font_size", "CTRL--", },
+    { "reset_font_size", "CTRL-0", },
+
+    { "find_buffer", "ALT-B", },
+    { "find_command", "ALT-X", },
+    { "find_file", "ALT-F", },
+
+    { "close_current_buffer", "ALT-W", },
+    { "save_buffer", "ALT-S", },
+    { "save_buffer_as", "ALT-SHIFT-S", },
+
+    { "search_forward", "CTRL-G", },
+    { "search_backward", "CTRL-SHIFT-G", },
+
+    { "close_other_panes", "CTRL-1", },
+    { "close_this_pane", "CTRL-2", },
+    { "new_pane_to_the_right", "CTRL-3", },
+
+    { "move_beginning_of_buffer", "CTRL-PAGEUP", },
+    { "move_end_of_buffer", "CTRL-PAGEDOWN", },
+    { "move_beginning_of_line", "CTRL-Q", },
+    { "move_end_of_line", "CTRL-E", },
+    { "move_up", "UP", },
+    { "move_down", "DOWN", },
+    { "move_left", "LEFT", },
+    { "move_right", "RIGHT", },
+    { "move_prev_word", "CTRL-LEFT", },
+    { "move_next_word", "CTRL-RIGHT", },
+    { "move_prev_page", "CTRL-UP", },
+    { "move_prev_page", "PAGEUP", },
+    { "move_next_page", "CTRL-DOWN", },
+    { "move_next_page", "PAGEDOWN", },
+
+    { "select_beginning_of_line", "CTRL-SHIFT-A", },
+    { "select_end_of_line", "CTRL-SHIFT-E", },
+    { "select_up", "SHIFT-UP", },
+    { "select_down", "SHIFT-DOWN", },
+    { "select_left", "SHIFT-LEFT", },
+    { "select_right", "SHIFT-RIGHT", },
+    { "select_prev_word", "CTRL-SHIFT-LEFT", },
+    { "select_next_word", "CTRL-SHIFT-RIGHT", },
+
+    { "remove_left", "BACKSPACE", },
+    { "remove_left", "SHIFT-BACKSPACE", },
+    { "remove_right", "DELETE", },
+    { "remove_right", "KEYPAD DELETE", },
+    { "remove_right", "KEYPAD PERIOD", },
+    { "remove_right", "CTRL-D", },
+    { "remove_prev_word", "CTRL-BACKSPACE", },
+    { "remove_next_word", "CTRL-DELETE", },
+    { "remove_next_word", "CTRL-KEYPAD DELETE", },
+    { "remove_next_word", "CTRL-KEYPAD PERIOD", },
+    { "remove_next_word", "ALT-D", },
+
+    { "move_beginning_of_buffer", "CTRL-KEYPAD 9", },
+    { "move_end_of_buffer", "CTRL-KEYPAD 3", },
+    { "move_up", "KEYPAD 8", },
+    { "move_down", "KEYPAD 2", },
+    { "move_left", "KEYPAD 4", },
+    { "move_right", "KEYPAD 6", },
+    { "move_prev_word", "CTRL-KEYPAD 4", },
+    { "move_next_word", "CTRL-KEYPAD-6", },
+    { "move_prev_page", "CTRL-KEYPAD 8", },
+    { "move_next_page", "CTRL-KEYPAD 2", },
+    { "move_prev_page", "KEYPAD 9", },
+    { "move_next_page", "KEYPAD 3", },
+    { "select_up", "SHIFT-KEYPAD 8", },
+    { "select_down", "SHIFT-KEYPAD 2", },
+    { "select_left", "SHIFT-KEYPAD 4", },
+    { "select_right", "SHIFT-KEYPAD 6", },
+    { "select_prev_word", "CTRL-SHIFT-KEYPAD 4", },
+    { "select_next_word", "CTRL-SHIFT-KEYPAD 6", },
+
+    { "indent_or_tab_stop", "TAB", },
+    { "indent_or_tab_stop", "SHIFT-TAB", },
+    { "newline_and_indent", "ENTER", },
+    { "newline_and_indent", "SHIFT-ENTER", },
+    { "toggle_selection_mode", "CTRL-SPACE", },
+
+    { "find_buffer", "CTRL-B", },
+    { "find_command", "ALT-X", },
+    { "find_file", "CTRL-X", },
+    { "replace_in_buffer", "ALT-%", },
+
+    { "close_current_buffer", "CTRL-K", },
+    { "save_buffer", "CTRL-S", },
+    { "save_buffer_as", "CTRL-SHIFT-S", },
+
+    { "move_beginning_of_buffer", "ALT-<", },
+    { "move_end_of_buffer", "ALT->", },
+    { "move_beginning_of_line", "CTRL-A", },
+    { "move_end_of_line", "CTRL-E", },
+    { "move_up", "CTRL-Z", },
+    { "move_down", "CTRL-V", },
+    { "move_prev_word", "CTRL-R", },
+    { "move_next_word", "CTRL-F", },
+    { "move_left", "ALT-R", },
+    { "move_right", "ALT-F", },
+    { "move_next_paragraph", "ALT-V", },
+    { "move_prev_paragraph", "ALT-Z", },
+
+    { "close_other_panes", "CTRL-1", },
+    { "close_this_pane", "CTRL-0", },
+    { "new_pane_to_the_right", "CTRL-3", },
+    { "other_pane", "CTRL-O", },
+    { "other_pane", "ALT-O", },
+
+    { "cut_selection_or_remove_prev_word", "CTRL-W", },
+    { "copy_selection", "ALT-W", },
+    { "paste", "CTRL-Y", },
+
+    { "undo", "CTRL-/", },
+    { "redo", "CTRL-?", },
+
+    { "new_window", "CTRL-N", },
+    { "close_window", "CTRL-Q", },
+};
+
+// TODO: add colorscheme config

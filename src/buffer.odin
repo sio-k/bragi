@@ -1,6 +1,6 @@
 package main
 
-import "base:runtime"
+import rt "base:runtime"
 
 import "core:encoding/uuid"
 import "core:log"
@@ -30,7 +30,7 @@ Source_Buffer :: enum {
 }
 
 Buffer :: struct {
-    allocator:        runtime.Allocator,
+    allocator:        rt.Allocator,
     uuid:             uuid.Identifier,
 
     cursors:          []Cursor, // for undo/redo and switch buffer, a copy to the pane's cursors
@@ -297,11 +297,13 @@ _purge_whitespaces_from_buffer :: proc(buffer: ^Buffer) -> (changed: bool) {
         // buffer, which is probably the most common scenario. If the
         // pane is not active we don't care about redrawing the cursor
         // anyways, so it will stay in its position.
-        if active_pane.buffer.uuid == buffer.uuid {
-            for &cursor in active_pane.cursors {
-                if cursor.pos > to_rem.start {
-                    cursor.pos -= amount
-                    cursor.sel -= amount
+        for w in windows {
+            if w.active_pane.buffer.uuid == buffer.uuid {
+                for &cursor in w.active_pane.cursors {
+                    if cursor.pos > to_rem.start {
+                        cursor.pos -= amount
+                        cursor.sel -= amount
+                    }
                 }
             }
         }
@@ -344,10 +346,12 @@ update_opened_buffers :: proc() {
     for buffer in open_buffers {
         is_active_in_panes := false
 
-        for pane in open_panes {
-            if pane.buffer.uuid == buffer.uuid {
-                is_active_in_panes = true
-                break
+        for w in windows {
+            for pane in w.open_panes {
+                if pane.buffer.uuid == buffer.uuid {
+                    is_active_in_panes = true
+                    break
+                }
             }
         }
 
@@ -367,10 +371,13 @@ update_opened_buffers :: proc() {
             profiling_end()
 
             profiling_start("passing buffer text to pane")
-            for pane in open_panes {
-                if pane.buffer.uuid != buffer.uuid do continue
-                if .Line_Wrappings in pane.flags do recalculate_line_wrappings(pane)
-                flag_pane(pane, {.Need_Full_Repaint})
+            // TODO (sio): should we walk all windows here?
+            for w in windows {
+                for pane in w.open_panes {
+                    if pane.buffer.uuid != buffer.uuid do continue
+                    if .Line_Wrappings in pane.flags do recalculate_line_wrappings(pane)
+                    flag_pane(pane, {.Need_Full_Repaint})
+                }
             }
             profiling_end()
         }
@@ -707,3 +714,14 @@ _get_unique_buffer_name :: proc(buffer: ^Buffer, fullpath: string) -> (result: s
 
     return
 }
+
+open_file_in_buffer :: proc (fullpath: string) -> ^Buffer{
+    rt.DEFAULT_TEMP_ALLOCATOR_TEMP_GUARD()
+    buffer_data, buffer_success := os.read_entire_file(fullpath, context.temp_allocator)
+    if !buffer_success {
+        log.errorf("couldn't open file '{}'", fullpath)
+        return nil
+    }
+    return buffer_get_or_create_from_file(fullpath, buffer_data)
+}
+

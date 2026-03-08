@@ -1,5 +1,8 @@
 package main
 
+import rt  "base:runtime"
+
+import     "core:fmt"
 import     "core:log"
 import     "core:math"
 import     "core:strings"
@@ -53,25 +56,112 @@ TEXTURE_HEIGHT    :: 128
 
 CHAR_PADDING :: 1
 
-@(private="file")
-fonts_initialized := false
-
-@(private="file")
-fonts_cache: [dynamic]^Font
-
-fonts_map:    map[Font_Face]^Font
-
 fonts_init :: proc() {
     log.debug("initializing fonts")
     success := ttf.Init()
     assert(success)
-    fonts_initialized = true
 }
 
 fonts_destroy :: proc() {
     log.debug("deinitializing fonts")
+    ttf.Quit()
+}
 
-    for font in fonts_cache {
+ensure_fonts_are_initialized :: #force_inline proc(window: ^Window) {
+    if !window.fonts_initialized {
+        font_cache_init(window)
+    }
+}
+
+font_cache_init :: proc(window: ^Window) {
+    COMMON_CHARACTERS :: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 "
+
+    scaled_font_editor_size := font_to_scaled_pixels(
+        window,
+        f32(settings.editor_font_size),
+    )
+    scaled_font_ui_size     := font_to_scaled_pixels(
+        window,
+        f32(settings.ui_font_size),
+    )
+    scaled_font_icons_size  := font_to_scaled_pixels(
+        window,
+        f32(settings.ui_font_size),
+        0,
+        1.33,
+    )
+    scaled_font_small_size  := font_to_scaled_pixels(
+        window,
+        f32(settings.ui_font_size),
+        -4,
+    )
+    scaled_font_xsmall_size := font_to_scaled_pixels(window, 10)
+
+    alloc_err: rt.Allocator_Error
+    window.fonts_cache, alloc_err = make([dynamic]Font, len = 0, cap = 16, allocator = bragi_allocator)
+    assert(alloc_err == nil)
+
+    window.fonts_map[.UI_Regular] = get_font_with_size(
+        window,
+        FONT_UI_NAME,
+        FONT_UI_DATA,
+        scaled_font_ui_size,
+    )
+    window.fonts_map[.UI_Italic]  = get_font_with_size(
+        window,
+        FONT_UI_ITALIC_NAME,
+        FONT_UI_ITALIC_DATA,
+        scaled_font_ui_size,
+    )
+    window.fonts_map[.UI_Bold]    = get_font_with_size(
+        window,
+        FONT_UI_BOLD_NAME,
+        FONT_UI_BOLD_DATA,
+        scaled_font_ui_size,
+    )
+    window.fonts_map[.UI_Small]   = get_font_with_size(
+        window,
+        FONT_UI_NAME,
+        FONT_UI_DATA,
+        scaled_font_small_size,
+    )
+    window.fonts_map[.UI_XSmall]  = get_font_with_size(
+        window,
+        FONT_UI_NAME,
+        FONT_UI_DATA,
+        scaled_font_xsmall_size,
+    )
+    window.fonts_map[.Icons]      = get_font_with_size(
+        window,
+        FONT_ICONS_NAME,
+        FONT_ICONS_DATA,
+        scaled_font_icons_size,
+    )
+
+    // each pane has its own font, so we only preload the default size
+    // and we don't store it in fonts_map. The UI of the editor should
+    // rely on the UI fonts.
+    prepare_text(
+        window,
+        get_font_with_size(
+            window,
+            FONT_EDITOR_NAME,
+            FONT_EDITOR_DATA,
+            scaled_font_editor_size,
+        ),
+        COMMON_CHARACTERS,
+    )
+    prepare_text(
+        window,
+        window.fonts_map[.UI_Small],
+        "0123456789",
+    ) // typically used for line numbers
+
+    window.fonts_initialized = true
+}
+
+font_cache_destroy :: proc(window: ^Window) {
+    for font in window.fonts_cache {
         for _, glyph in font.glyphs_map {
             free(glyph)
         }
@@ -84,58 +174,33 @@ fonts_destroy :: proc() {
         delete(font.name)
         delete(font.glyphs_map)
         ttf.CloseFont(font.face)
-        free(font)
     }
 
-    delete(fonts_cache)
-    delete(fonts_map)
-    ttf.Quit()
+    delete(window.fonts_cache)
 }
 
-ensure_fonts_are_initialized :: #force_inline proc() {
-    if !fonts_initialized do fonts_init()
+font_to_scaled_pixels :: proc(
+    window: ^Window,
+    pt: f32,
+    size_diff: f32 = 0,
+    scale: f32 = 1.0,
+) -> i32 {
+    // HACK (sio): get rid of dpi scaling
+    //result := math.ceil(((pt + size_diff) * window.platform.dpi_scale) * scale)
+    //result = clamp(result, MINIMUM_FONT_SIZE, MAXIMUM_FONT_SIZE)
+    return i32(pt) //i32(result)
 }
 
-initialize_font_related_stuff :: proc() {
-    COMMON_CHARACTERS :: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 "
-
-    scaled_font_editor_size := font_to_scaled_pixels(f32(settings.editor_font_size))
-    scaled_font_ui_size     := font_to_scaled_pixels(f32(settings.ui_font_size))
-    scaled_font_icons_size  := font_to_scaled_pixels(f32(settings.ui_font_size), 0, 1.33)
-    scaled_font_small_size  := font_to_scaled_pixels(f32(settings.ui_font_size), -4)
-    scaled_font_xsmall_size := font_to_scaled_pixels(10)
-
-    fonts_map[.UI_Regular] = get_font_with_size(FONT_UI_NAME,        FONT_UI_DATA,        scaled_font_ui_size    )
-    fonts_map[.UI_Italic]  = get_font_with_size(FONT_UI_ITALIC_NAME, FONT_UI_ITALIC_DATA, scaled_font_ui_size    )
-    fonts_map[.UI_Bold]    = get_font_with_size(FONT_UI_BOLD_NAME,   FONT_UI_BOLD_DATA,   scaled_font_ui_size    )
-    fonts_map[.UI_Small]   = get_font_with_size(FONT_UI_NAME,        FONT_UI_DATA,        scaled_font_small_size )
-    fonts_map[.UI_XSmall]  = get_font_with_size(FONT_UI_NAME,        FONT_UI_DATA,        scaled_font_xsmall_size)
-    fonts_map[.Icons]      = get_font_with_size(FONT_ICONS_NAME,     FONT_ICONS_DATA,     scaled_font_icons_size )
-
-    // each pane has its own font, so we only preload the default size
-    // and we don't store it in fonts_map. The UI of the editor should
-    // rely on the UI fonts.
-    prepare_text(
-        get_font_with_size(
-            FONT_EDITOR_NAME, FONT_EDITOR_DATA, scaled_font_editor_size,
-        ), COMMON_CHARACTERS,
-    )
-    prepare_text(fonts_map[.UI_Small],   "0123456789") // tipically used for numbers
-}
-
-font_to_scaled_pixels :: proc(pt: f32, size_diff: f32 = 0, scale: f32 = 1.0) -> i32 {
-    result := math.ceil(((pt + size_diff) * dpi_scale) * scale)
-    result = clamp(result, MINIMUM_FONT_SIZE, MAXIMUM_FONT_SIZE)
-    return i32(result)
-}
-
-get_font_with_size :: proc(name: string, data: []byte, character_height: i32) -> ^Font {
-    ensure_fonts_are_initialized()
-
-    for font in fonts_cache {
+get_font_with_size :: proc(
+    window: ^Window,
+    name: string,
+    data: []byte,
+    character_height: i32,
+) -> ^Font {
+    for &font in window.fonts_cache {
         if font.base_height != character_height do continue
         if font.name != name do continue
-        return font
+        return &font
     }
 
     font_data := sdl.IOFromMem(raw_data(data), len(data))
@@ -143,7 +208,8 @@ get_font_with_size :: proc(name: string, data: []byte, character_height: i32) ->
 
     ttf.SetFontHinting(face, .LIGHT_SUBPIXEL)
 
-    result := new(Font)
+    // NOTE (sio): we don't need to allocate here
+    result := Font {}
     // TODO(nawe) maybe I don't need to clone this but I would guess,
     // if I ever allow to change it, I might just temporary load this
     // from a config and would need to clone it. It should be a small
@@ -165,7 +231,7 @@ get_font_with_size :: proc(name: string, data: []byte, character_height: i32) ->
         result.character_height = result.max_ascender - result.max_descender
     }
 
-    append(&result.textures, texture_create(.STREAMING, TEXTURE_WIDTH, TEXTURE_HEIGHT))
+    append(&result.textures, texture_create(window, .STREAMING, TEXTURE_WIDTH, TEXTURE_HEIGHT))
 
     minx, maxx, xadvance: i32
     _ = ttf.GetGlyphMetrics(result.face, u32('M'), &minx, &maxx, nil, nil, &xadvance)
@@ -180,25 +246,37 @@ get_font_with_size :: proc(name: string, data: []byte, character_height: i32) ->
         }
     }
 
-    append(&fonts_cache, result)
-    return result
+    append(&window.fonts_cache, result)
+    return &window.fonts_cache[len(window.fonts_cache) - 1]
 }
 
-prepare_text :: proc(font: ^Font, text: string) -> (width_in_pixels: i32) {
+prepare_text :: proc(
+    window: ^Window,
+    font: ^Font,
+    text: string,
+) -> (width_in_pixels: i32) {
     for r in text {
-        glyph := find_or_create_glyph(font, r)
+        glyph := find_or_create_glyph(window, font, r)
         width_in_pixels += glyph.xadvance
     }
 
     return
 }
 
-find_or_create_glyph :: proc(font: ^Font, r: rune) -> ^Glyph_Data {
+find_or_create_glyph :: proc(
+    window: ^Window,
+    font: ^Font,
+    r: rune,
+) -> ^Glyph_Data {
     glyph, ok := font.glyphs_map[r]
     if ok do return glyph
 
     if !ttf.FontHasGlyph(font.face, u32(r)) {
-        return find_or_create_glyph(font, font.replacement_character)
+        ret_val := find_or_create_glyph(window, font, font.replacement_character)
+        if r == '\t' {
+            ret_val.xadvance = ret_val.w * 8
+        }
+        return ret_val
     }
 
     x, y, width, height: i32
@@ -209,8 +287,11 @@ find_or_create_glyph :: proc(font: ^Font, r: rune) -> ^Glyph_Data {
         x += width
     }
 
+    // TODO (sio): why are we allocating this?
+    // this causes us to waste what is the core strength of Odin's map: storing large shit efficiently without issues
+    // TODO (sio): where and how do we rely on these pointers being stable? Do we really need them stable?
     result := new(Glyph_Data)
-    result.bucket_index = len(font.textures)-1
+    result.bucket_index = len(font.textures) - 1
 
     str_from_rune := utf8.runes_to_string([]rune{r}, context.temp_allocator)
     cstr := cstring(raw_data(str_from_rune))
@@ -223,7 +304,7 @@ find_or_create_glyph :: proc(font: ^Font, r: rune) -> ^Glyph_Data {
             x = 0
             y = 0
             result.bucket_index += 1
-            append(&font.textures, texture_create(.STREAMING, TEXTURE_WIDTH, TEXTURE_HEIGHT))
+            append(&font.textures, texture_create(window, .STREAMING, TEXTURE_WIDTH, TEXTURE_HEIGHT))
         }
     }
 
@@ -247,6 +328,10 @@ find_or_create_glyph :: proc(font: ^Font, r: rune) -> ^Glyph_Data {
 
     sdl.UnlockTexture(font.textures[result.bucket_index])
 
+    if _, v, v_ok := rt.map_get(font.glyphs_map, r); v_ok {
+        // glyph already allocated, free
+        free(v)
+    }
     font.glyphs_map[r] = result
     font.last_packed_glyph = result
     return result

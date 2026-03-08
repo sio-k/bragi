@@ -34,26 +34,39 @@ Translation :: enum u16 {
 }
 
 Pane :: struct {
-    uuid:                uuid.Identifier,
-    cursors:             [dynamic]Cursor,
-    cursor_moved:        bool,
-    cursor_selecting:    bool, // mode like region-mode in Emacs
-    cursor_showing:      bool, // for rendering, hiding during blink interludes
-    cursor_blink_count:  int,
-    cursor_blink_timer:  time.Tick,
+    uuid:                uuid.Identifier,    // 0B offset (size 16B)
+    window:              ^Window,            // 16B offset
+    cursors:             [dynamic]Cursor,    // 24B offset (size 40B)
+    cursor_moved:        bool,               // 64B offset
+    // mode like region-mode in Emacs
+    cursor_selecting:    bool,               // 65B offset
+    // for rendering, hiding during blink interludes
+    cursor_showing:      bool,               // 66B offset
+    // 5B unused
 
-    buffer:              ^Buffer,
-    regions:             [dynamic]Highlight,
-    wrapped_line_starts: [dynamic]int,
-    local_font_size:     f32,
-    font:                ^Font,
-    flags:               Pane_Flags,
+    cursor_blink_count:  int,                // 72B offset
+    cursor_blink_timer:  time.Tick,          // 80B offset (size 8B)
+
+    buffer:              ^Buffer,            // 88B offset
+    regions:             [dynamic]Highlight, // 96B offset (size 40B)
+    wrapped_line_starts: [dynamic]int,       // 136B offset (size 40B)
+    local_font_size:     f32,                // 176B offset
+    // 4B unused
+    font:                ^Font,              // 184B offset
+    flags:               Pane_Flags,         // 192B offset
+    // 3B unused
 
     // rendering stuff
-    rect:                IRect,
-    x_offset:            int,
-    y_offset:            int,
-}
+    rect:                IRect,              // 196B offset (size 16B)
+    // 4B unused
+    x_offset:            int,                // 216B offset
+    y_offset:            int,                // 224B offset
+}                                            // size: 232B
+#assert(size_of([dynamic]Cursor) == 40)
+#assert(size_of([dynamic]Highlight) == 40)
+#assert(size_of([dynamic]int) == 40)
+#assert(size_of(IRect) == 16)
+#assert(align_of(IRect) == 4)
 
 Cursor :: struct {
     active: bool,
@@ -76,11 +89,12 @@ Code_Line :: struct {
     tokens:             []Token_Kind,
 }
 
-pane_create :: proc(pane: ^Pane = nil) -> ^Pane {
+pane_create :: proc(window: ^Window, pane: ^Pane = nil) -> ^Pane {
     log.debug("creating new pane")
-    result := new(Pane)
+    result := pane_add(window)
 
     result.uuid = uuid.generate_v6()
+    result.window = window
     result.cursor_moved = true
     result.cursor_showing = true
     result.cursor_blink_count = 0
@@ -101,8 +115,7 @@ pane_create :: proc(pane: ^Pane = nil) -> ^Pane {
         result.local_font_size = pane.local_font_size
     }
 
-    append(&open_panes, result)
-    update_pane_layout()
+    update_pane_layout(window)
     return result
 }
 
@@ -111,17 +124,17 @@ pane_destroy :: proc(pane: ^Pane) {
     delete(pane.regions)
     delete(pane.cursors)
     delete(pane.wrapped_line_starts)
-    free(pane)
+    pane_rm(pane.window, pane)
 }
 
-update_and_draw_panes :: proc() {
+update_and_draw_panes :: proc(window: ^Window) {
     profiling_start("update and draw all panes")
     should_cursor_blink :: proc(pane: ^Pane) -> bool {
         return pane.cursor_blink_count < CURSOR_BLINK_MAX_COUNT &&
             time.tick_diff(pane.cursor_blink_timer, time.tick_now()) > CURSOR_BLINK_TIMEOUT
     }
 
-    for pane in open_panes {
+    for pane in window.open_panes {
         assert(pane.buffer != nil)
         assert(len(pane.cursors) > 0)
 
@@ -133,7 +146,7 @@ update_and_draw_panes :: proc() {
             flag_pane(pane, {.Need_Full_Repaint})
         }
 
-        if time.tick_diff(last_keystroke, time.tick_now()) < CURSOR_RESET_TIMEOUT {
+        if time.tick_diff(window.last_keystroke, time.tick_now()) < CURSOR_RESET_TIMEOUT {
             pane.cursor_showing = true
             pane.cursor_blink_count = 0
             pane.cursor_blink_timer = time.tick_now()
@@ -152,12 +165,14 @@ update_and_draw_panes :: proc() {
             flag_pane(pane, {.Need_Full_Repaint})
         }
 
-        set_scissors(&pane.rect)
+        set_scissors(window, &pane.rect)
 
         visible_rows := get_pane_visible_rows(pane)
         size_of_gutter := get_gutter_size(pane)
         initial_pen := Vector2{size_of_gutter, 0}
-        if settings.modeline_position == .top do initial_pen.y = get_modeline_height()
+        if settings.modeline_position == .top {
+            initial_pen.y = get_modeline_height(window)
+        }
 
         lines := get_lines_array(pane)
         first_row := pane.y_offset
@@ -201,12 +216,13 @@ update_and_draw_panes :: proc() {
 
         draw_code(pane, pane.font, initial_pen, code_lines[:], highlights[:])
 
-        for cursor in pane.cursors {
+        for &cursor in pane.cursors {
             out_of_bounds, cursor_pen, rune_behind_cursor :=
                 prepare_cursor_for_drawing(pane, pane.font, initial_pen, cursor)
             _ = rune_behind_cursor
 
             if !out_of_bounds do draw_cursor(
+                window,
                 pane.font, cursor_pen, rune_behind_cursor,
                 pane.cursor_showing, is_pane_focused(pane), cursor.active,
             )
@@ -215,28 +231,38 @@ update_and_draw_panes :: proc() {
         draw_gutter(pane)
         draw_modeline(pane)
 
-        set_scissors()
+        set_scissors(window)
         unflag_pane(pane, {.Need_Full_Repaint})
     }
     profiling_end()
 }
 
-update_pane_layout :: proc() {
-    pane_width  := window_width / i32(len(open_panes))
-    pane_height := window_height
+update_pane_layout :: proc(window: ^Window) {
+    pane_width  := window.platform.window_width / i32(len(window.open_panes))
+    pane_height := window.platform.window_height
 
-    for &pane, index in open_panes {
+    for &pane, index in window.open_panes {
         update_pane_font(pane)
 
         pane.rect = {pane_width * i32(index), 0, pane_width, pane_height}
-        if .Line_Wrappings in pane.flags do recalculate_line_wrappings(pane)
+        if .Line_Wrappings in pane.flags {
+            recalculate_line_wrappings(pane)
+        }
         flag_pane(pane, {.Need_Full_Repaint})
     }
 }
 
 update_pane_font :: #force_inline proc(pane: ^Pane) {
-    scaled_character_height := font_to_scaled_pixels(pane.local_font_size)
-    pane.font = get_font_with_size(FONT_EDITOR_NAME, FONT_EDITOR_DATA, scaled_character_height)
+    scaled_character_height := font_to_scaled_pixels(
+        pane.window,
+        pane.local_font_size,
+    )
+    pane.font = get_font_with_size(
+        pane.window,
+        FONT_EDITOR_NAME,
+        FONT_EDITOR_DATA,
+        scaled_character_height,
+    )
 }
 
 recalculate_line_wrappings :: proc(pane: ^Pane) {
@@ -317,7 +343,30 @@ unflag_pane :: #force_inline proc(pane: ^Pane, flags: Pane_Flags) {
 }
 
 maybe_sanitize_pane :: proc(pane: ^Pane) {
-    if .Restored_Recently not_in pane.flags do return
+    // FIXME (sio): this hack works to prevent bragi from crashing
+    //              when a cursor would otherwise overrun the buffer,
+    //              but it's not particularly nice in it's effects
+    {
+        // only sanitize cursors if buffer is open in more than one pane
+        panes_with_this_buffer_open_count := 0
+        for w in windows {
+            for p in w.open_panes {
+                if p.buffer == pane.buffer {
+                    panes_with_this_buffer_open_count += 1
+                }
+            }
+        }
+
+        if panes_with_this_buffer_open_count > 1 {
+            for &cursor in pane.cursors {
+                cursor.pos = clamp(cursor.pos, 0, buffer_len(pane.buffer))
+            }
+        }
+    }
+
+    if .Restored_Recently not_in pane.flags {
+        return
+    }
 
     unflag_pane(pane, {.Restored_Recently})
     lines := get_lines_array(pane)
@@ -387,7 +436,7 @@ prepare_cursor_for_drawing :: #force_inline proc(
     pen = starting_pen
     line_text := pane.buffer.text[start:cursor.pos]
 
-    pen.x += prepare_text(font, line_text)
+    pen.x += prepare_text(pane.window, font, line_text)
     if .Line_Wrappings not_in pane.flags {
         pen.x -= i32(pane.x_offset) * font.xadvance
     }
@@ -425,13 +474,13 @@ cursor_offset_to_coords :: proc(pane: ^Pane, lines: []int, offset: int) -> (resu
 
 cursor_coords_to_offset :: proc(pane: ^Pane, lines: []int, coords: Coords) -> (offset: int) {
     offset = lines[coords.row]
-    column := coords.column
     buf := pane.buffer.text
 
-    for column > 0 {
-        column -= 1
+    for column := 0; column < coords.column; column += 1 {
         offset += 1
-        for offset < len(buf) && is_continuation_byte(buf[offset]) do offset += 1
+        for offset < len(buf) && is_continuation_byte(buf[offset]) {
+            offset += 1
+        }
     }
     return
 }
@@ -553,11 +602,11 @@ sort_cursors_by_offset :: proc(pane: ^Pane) {
 }
 
 is_pane_focused :: proc(pane: ^Pane) -> bool {
-    return !global_widget.active && active_pane.uuid == pane.uuid
+    return !pane.window.global_widget.active && pane.window.active_pane.uuid == pane.uuid
 }
 
 get_gutter_size :: proc(pane: ^Pane) -> (gutter_size: i32) {
-    font := fonts_map[.UI_Small]
+    font := pane.window.fonts_map[.UI_Small]
     gutter_size = font.em_width
 
     if settings.show_line_numbers {
@@ -584,14 +633,14 @@ get_pane_visible_rows :: proc(pane: ^Pane) -> (result: int) {
     profiling_start("get_pane_visible_rows")
     pane_height := pane.rect.h
     font_height := pane.font.character_height
-    modeline_height := get_modeline_height()
+    modeline_height := get_modeline_height(pane.window)
     result = int((pane_height - modeline_height)/font_height)
     return result
 }
 
-get_modeline_height :: #force_inline proc() -> i32 {
+get_modeline_height :: #force_inline proc(window: ^Window) -> i32 {
     MODELINE_PADDING :: 8
-    font := fonts_map[.UI_Regular]
+    font := window.fonts_map[.UI_Regular]
     return font.character_height + MODELINE_PADDING
 }
 
@@ -649,12 +698,12 @@ maybe_scroll_pane_to_cursor_view :: proc(pane: ^Pane) {
     }
 }
 
-pane_handle_mouse_events :: proc() {
-    set_pane_at_mouse_pos_as_active :: proc() {
-        mx, my := mouse_state.position.x, mouse_state.position.y
+pane_handle_mouse_events :: proc(window: ^Window) {
+    set_pane_at_mouse_pos_as_active :: proc(window: ^Window) {
+        mx, my := window.mouse_state.position.x, window.mouse_state.position.y
         result: ^Pane
 
-        for pane in open_panes {
+        for pane in window.open_panes {
             left := i32(pane.rect.x)
             right := left + i32(pane.rect.w)
             up := i32(pane.rect.y)
@@ -667,21 +716,21 @@ pane_handle_mouse_events :: proc() {
         }
 
         if result == nil {
-            flag_pane(active_pane, {.Need_Full_Repaint})
+            flag_pane(window.active_pane, {.Need_Full_Repaint})
         } else {
-            flag_pane(active_pane, {.Need_Full_Repaint})
-            active_pane = result
-            flag_pane(active_pane, {.Need_Full_Repaint})
+            flag_pane(window.active_pane, {.Need_Full_Repaint})
+            window.active_pane = result
+            flag_pane(window.active_pane, {.Need_Full_Repaint})
         }
     }
 
-    if mouse_state.scroll_x != 0 || mouse_state.scroll_y != 0 {
-        set_pane_at_mouse_pos_as_active()
-        pane := active_pane
+    if window.mouse_state.scroll_x != 0 || window.mouse_state.scroll_y != 0 {
+        set_pane_at_mouse_pos_as_active(window)
+        pane := window.active_pane
         lines := get_lines_array(pane)
         visible_rows := get_pane_visible_rows(pane)
-        scroll_x := int(mouse_state.scroll_x) * settings.mouse_scroll_threshold
-        scroll_y := int(mouse_state.scroll_y) * settings.mouse_scroll_threshold
+        scroll_x := int(window.mouse_state.scroll_x) * settings.mouse_scroll_threshold
+        scroll_y := int(window.mouse_state.scroll_y) * settings.mouse_scroll_threshold
 
         if .Line_Wrappings in pane.flags {
             new_offset := pane.x_offset + scroll_x
@@ -694,39 +743,39 @@ pane_handle_mouse_events :: proc() {
         }
     }
 
-    if mouse_state.left_button.is_dragging {
+    if window.mouse_state.left_button.is_dragging {
         // we don't change panes while dragging
-        pane := active_pane
+        pane := window.active_pane
 
         if len(pane.buffer.text) == 0 do return
 
         cursor := get_first_active_cursor(pane)
-        current := mouse_state.position
+        current := window.mouse_state.position
         curr_mpos := Vector2{current.x - i32(pane.rect.x), current.y - i32(pane.rect.y)}
         pos_offset := mouse_pos_to_offset(pane, curr_mpos)
         cursor.pos = pos_offset
         pane.cursor_moved = true
-    } else if mouse_state.left_button.just_clicked {
-        set_pane_at_mouse_pos_as_active()
-        pane := active_pane
+    } else if window.mouse_state.left_button.just_clicked {
+        set_pane_at_mouse_pos_as_active(window)
+        pane := window.active_pane
 
         if len(pane.buffer.text) == 0 do return
 
         lines := get_lines_array(pane)
-        mx, my := mouse_state.position.x, mouse_state.position.y
+        mx, my := window.mouse_state.position.x, window.mouse_state.position.y
         relative_mouse_pos := Vector2{ mx - i32(pane.rect.x), my - i32(pane.rect.y) }
         offset := mouse_pos_to_offset(pane, relative_mouse_pos)
         clear(&pane.cursors)
         add_cursor(pane, offset)
         pane.cursor_moved = true
 
-        if mouse_state.left_button.just_double_clicked {
+        if window.mouse_state.left_button.just_double_clicked {
             cursor := get_first_active_cursor(pane)
             pos, _ := translate_position(pane, cursor.pos, .next_word)
             sel, _ := translate_position(pane, cursor.pos, .prev_word)
             cursor.pos = pos
             cursor.sel = sel
-        } else if mouse_state.left_button.just_triple_clicked {
+        } else if window.mouse_state.left_button.just_triple_clicked {
             cursor := get_first_active_cursor(pane)
             line_index := get_line_index(cursor.pos, lines)
             start, end := get_line_boundaries(line_index, lines)
@@ -752,15 +801,26 @@ mouse_pos_to_offset :: proc(pane: ^Pane, relative_mouse_pos: Vector2) -> int {
         coords.column = min(int(X), len(pane.buffer.text)-1)
     } else {
         coords.row = clamp(int(Y), 0, len(lines)-1)
+        line_start := lines[coords.row]
+        if line_start < len(pane.buffer.text) && pane.buffer.text[line_start] == '\t' {
+            // HACK (sio): handle leading tabs
+            // FIXME (sio): can't deal properly with multiple tabs in sequence
+            // FIXME (sio): make tab size configurable
+            offset := 0
+            for pane.buffer.text[line_start + offset] == '\t' && X > 1 && offset < (line_start + len(pane.buffer.text)) {
+                X -= 7
+                offset += 1
+            }
+        }
         start, end := get_line_boundaries(coords.row, lines)
         coords.column = clamp(int(X), 0, end - start)
     }
 
-    return clamp(cursor_coords_to_offset(pane, lines, coords), 0, len(pane.buffer.text)-1)
+    return clamp(cursor_coords_to_offset(pane, lines, coords), 0, len(pane.buffer.text) - 1)
 }
 
-pane_keyboard_event_handler :: proc(event: Event_Keyboard, cmd: Command) -> bool {
-    pane := active_pane
+pane_keyboard_event_handler :: proc(window: ^Window, event: Event_Keyboard, cmd: Command) -> bool {
+    pane := window.active_pane
     buffer := pane.buffer
 
     copy_cursors(pane, buffer)
@@ -776,80 +836,86 @@ pane_keyboard_event_handler :: proc(event: Event_Keyboard, cmd: Command) -> bool
     case .quit_mode: // handled globally
 
     case .find_buffer:
-        widget_open_find_buffer()
+        widget_open_find_buffer(window)
         return true
     case .find_command:
         return false
     case .find_file:
-        widget_open_find_file()
+        widget_open_find_file(window)
         return true
     case .replace_in_buffer:
-        widget_open_replace_in_buffer()
+        widget_open_replace_in_buffer(window)
         return true
     case .search_backward: fallthrough
     case .search_forward:
-        widget_open_search_in_buffer()
+        widget_open_search_in_buffer(window)
         return true
 
     case .close_this_pane:
-        if len(open_panes) == 1 do return true
+        if len(window.open_panes) == 1 do return true
         pane_index_to_close := -1
-        for other, index in open_panes {
-            if active_pane.uuid == other.uuid {
+        for other, index in window.open_panes {
+            if window.active_pane.uuid == other.uuid {
                 pane_index_to_close = index
                 break
             }
         }
-        new_pane_index := pane_index_to_close < len(open_panes) - 1 ? pane_index_to_close + 1 : 0
-        old_pane := active_pane
-        active_pane = open_panes[new_pane_index]
-        ordered_remove(&open_panes, pane_index_to_close)
+        new_pane_index := pane_index_to_close < len(window.open_panes) - 1 ? pane_index_to_close + 1 : 0
+        old_pane := window.active_pane
+        window.active_pane = window.open_panes[new_pane_index]
         pane_destroy(old_pane)
-        update_pane_layout()
+        update_pane_layout(window)
         return true
     case .close_other_panes:
-        if len(open_panes) == 1 do return true
-        ids_to_remove := make([dynamic]uuid.Identifier, 0, len(open_panes), context.temp_allocator)
-        for other in open_panes {
-            if active_pane.uuid != other.uuid do append(&ids_to_remove, other.uuid)
+        if len(window.open_panes) == 1 do return true
+        ids_to_remove := make([dynamic]uuid.Identifier, 0, len(window.open_panes), context.temp_allocator)
+        for other in window.open_panes {
+            if window.active_pane.uuid != other.uuid {
+                append(&ids_to_remove, other.uuid)
+            }
         }
         for len(ids_to_remove) > 0 {
             pane_id := pop(&ids_to_remove)
 
-            for other, index in open_panes {
+            for other in window.open_panes {
                 if other.uuid == pane_id {
-                    unordered_remove(&open_panes, index)
                     pane_destroy(other)
                     break
                 }
             }
         }
-        update_pane_layout()
+        update_pane_layout(window)
         flag_buffer(pane.buffer, {.Dirty})
         return true
     case .new_pane_to_the_right:
-        result := pane_create(pane)
-        active_pane = result
+        if can_add_pane(window) {
+            result := pane_create(window, pane)
+            window.active_pane = result
+        } else {
+            log.errorf("cannot add requested pane")
+        }
         return true
     case .other_pane:
-        if len(open_panes) == 1 do return true
+        if len(window.open_panes) == 1 do return true
         other_pane_index := -1
-        for other, index in open_panes {
-            if active_pane.uuid == other.uuid {
+        for other, index in window.open_panes {
+            if window.active_pane.uuid == other.uuid {
                 other_pane_index = index
                 break
             }
         }
-        other_pane_index = other_pane_index < len(open_panes) - 1 ? other_pane_index + 1 : 0
-        old_pane := active_pane
-        active_pane = open_panes[other_pane_index]
+        other_pane_index = other_pane_index < len(window.open_panes) - 1 ? other_pane_index + 1 : 0
+        old_pane := window.active_pane
+        window.active_pane = window.open_panes[other_pane_index]
         // repaiting the old pane and the new pane
         flag_pane(old_pane, {.Need_Full_Repaint})
-        flag_pane(active_pane, {.Need_Full_Repaint})
+        flag_pane(window.active_pane, {.Need_Full_Repaint})
         return true
     case .close_current_buffer:
-        for &other in open_panes {
-            if other.buffer.uuid == buffer.uuid do other.buffer = nil
+        for &other in window.open_panes {
+            if other.buffer.uuid == buffer.uuid {
+                other.buffer = nil
+            }
         }
 
         index := buffer_index(buffer)
@@ -864,20 +930,22 @@ pane_keyboard_event_handler :: proc(event: Event_Keyboard, cmd: Command) -> bool
             new_buffer = open_buffers[index]
         }
 
-        for other in open_panes {
-            if other.buffer == nil do switch_to_buffer(other, new_buffer)
+        for other in window.open_panes {
+            if other.buffer == nil {
+                switch_to_buffer(other, new_buffer)
+            }
         }
 
         return true
     case .save_buffer:
         if buffer.filepath == "" {
-            widget_open_save_file_as()
+            widget_open_save_file_as(window)
         } else {
             buffer_save(buffer)
         }
         return true
     case .save_buffer_as:
-        widget_open_save_file_as()
+        widget_open_save_file_as(window)
         return true
 
 
@@ -885,14 +953,14 @@ pane_keyboard_event_handler :: proc(event: Event_Keyboard, cmd: Command) -> bool
         new_font_size := pane.local_font_size * 1.25
         if new_font_size < MAXIMUM_FONT_SIZE {
             pane.local_font_size = new_font_size
-            update_pane_layout()
+            update_pane_layout(window)
         }
         return true
     case .decrease_font_size:
         new_font_size := pane.local_font_size * 0.8
         if new_font_size > MINIMUM_FONT_SIZE {
             pane.local_font_size = new_font_size
-            update_pane_layout()
+            update_pane_layout(window)
         }
         return true
     case .reset_font_size:
@@ -900,7 +968,7 @@ pane_keyboard_event_handler :: proc(event: Event_Keyboard, cmd: Command) -> bool
 
         if pane.local_font_size != default_font_size {
             pane.local_font_size = default_font_size
-            update_pane_layout()
+            update_pane_layout(window)
         }
         return true
 
@@ -1052,7 +1120,9 @@ pane_keyboard_event_handler :: proc(event: Event_Keyboard, cmd: Command) -> bool
             return true
         }
         profiling_start("doing undo")
-        for piece in buffer.pieces do delete(piece.line_starts)
+        for piece in buffer.pieces {
+            delete(piece.line_starts)
+        }
         delete(pane.cursors)
         delete(buffer.pieces)
         pane.cursors = slice.clone_to_dynamic(cursors)
@@ -1071,7 +1141,9 @@ pane_keyboard_event_handler :: proc(event: Event_Keyboard, cmd: Command) -> bool
         }
 
         profiling_start("doing redo")
-        for piece in buffer.pieces do delete(piece.line_starts)
+        for piece in buffer.pieces {
+            delete(piece.line_starts)
+        }
         delete(pane.cursors)
         delete(buffer.pieces)
         pane.cursors = slice.clone_to_dynamic(cursors)
@@ -1080,6 +1152,19 @@ pane_keyboard_event_handler :: proc(event: Event_Keyboard, cmd: Command) -> bool
         pane_toggle_selection(pane, true)
         pane.cursor_moved = true
         profiling_end()
+        return true
+
+    case .cut_selection_or_remove_prev_word:
+        // check selections, and only delete prev word if we have no selection
+        for cursor in pane.cursors {
+            if cursor.active && (cursor.pos != cursor.sel) {
+                pane_copy_selected_text(pane, true)
+                pane_remove_selections(pane)
+                return true
+            }
+        }
+
+        pane_remove_at_points(pane, .prev_word)
         return true
 
     case .cut_selection:
@@ -1113,6 +1198,8 @@ pane_keyboard_event_handler :: proc(event: Event_Keyboard, cmd: Command) -> bool
         if len(text) > 0 do pane_insert_at_points(pane, text)
         return true
     case .paste_from_history:
+    case .new_window: log.errorf("new_window command should not be handled in pane handler")
+    case .close_window: log.errorf("close_window command should not be handled in pane handler")
     }
 
     return false
@@ -1344,6 +1431,7 @@ pane_insert_at_points :: proc(pane: ^Pane, text: string) {
         unique_lines_to_indent := slice.unique(temp_lines_to_indent[:])
         slice.stable_sort(unique_lines_to_indent)
         _indent_multi_line(
+            pane.window,
             pane.buffer, unique_lines_to_indent,
             _on_indent_realign_active_pane_cursors,
         )
@@ -1397,6 +1485,7 @@ pane_insert_newlines_and_indent :: proc(pane: ^Pane) {
         unique_lines_to_indent := slice.unique(temp_lines_to_indent[:])
         slice.stable_sort(unique_lines_to_indent)
         _indent_multi_line(
+            pane.window,
             pane.buffer, unique_lines_to_indent,
             _on_indent_realign_active_pane_cursors,
             false,
@@ -1409,7 +1498,7 @@ pane_insert_newlines_and_indent :: proc(pane: ^Pane) {
 
 pane_maybe_indent_or_go_to_tab_stop :: proc(pane: ^Pane) {
     // only call this in current pane
-    assert(pane.uuid == active_pane.uuid)
+    assert(pane.uuid == pane.window.active_pane.uuid)
 
     // if the buffer is not expecting indentation, just treat it as
     // moving to the beginning of line.
@@ -1457,6 +1546,7 @@ pane_maybe_indent_or_go_to_tab_stop :: proc(pane: ^Pane) {
     if len(unique_lines_to_indent) == 1 {
         line_index := unique_lines_to_indent[0]
         _indent_single_line(
+            pane.window,
             pane.buffer, pane.buffer.text,
             line_index, buffer_lines,
             _on_indent_realign_active_pane_cursors,
@@ -1464,6 +1554,7 @@ pane_maybe_indent_or_go_to_tab_stop :: proc(pane: ^Pane) {
     } else {
         slice.stable_sort(unique_lines_to_indent)
         _indent_multi_line(
+            pane.window,
             pane.buffer, unique_lines_to_indent,
             _on_indent_realign_active_pane_cursors,
         )
@@ -1657,11 +1748,21 @@ translate_position :: proc(pane: ^Pane, pos: int, t: Translation, max_column := 
 }
 
 @(private="file")
-Indent_Callback_Proc :: #type proc(prev_offset, new_offset, amount: int)
+Indent_Callback_Proc :: #type proc(
+    window: ^Window,
+    prev_offset: int,
+    new_offset: int,
+    amount: int,
+)
 
 @(private="file")
-_on_indent_realign_active_pane_cursors :: proc(prev_offset, new_offset, amount: int) {
-    pane := active_pane
+_on_indent_realign_active_pane_cursors :: proc(
+    window: ^Window,
+    prev_offset: int,
+    new_offset: int,
+    amount: int,
+) {
+    pane := window.active_pane
 
     for &cursor in pane.cursors {
         if cursor.pos >= prev_offset {
@@ -1672,7 +1773,7 @@ _on_indent_realign_active_pane_cursors :: proc(prev_offset, new_offset, amount: 
 }
 
 @(private="file")
-_indent_multi_line :: proc(buffer: ^Buffer, lines_to_indent: []int, after_single_line_indent_callback: Indent_Callback_Proc, skip_empty_lines := true) {
+_indent_multi_line :: proc(window: ^Window, buffer: ^Buffer, lines_to_indent: []int, after_single_line_indent_callback: Indent_Callback_Proc, skip_empty_lines := true) {
     profiling_start("indenting region or multiple lines")
     for line_index in lines_to_indent {
         // somewhat slow here, but we need to reconstruct some lines
@@ -1686,6 +1787,7 @@ _indent_multi_line :: proc(buffer: ^Buffer, lines_to_indent: []int, after_single
 
         if !is_empty_line {
             _indent_single_line(
+                window,
                 buffer, strings.to_string(contents),
                 line_index, temp_line_starts[:],
                 after_single_line_indent_callback,
@@ -1696,7 +1798,7 @@ _indent_multi_line :: proc(buffer: ^Buffer, lines_to_indent: []int, after_single
 }
 
 @(private="file")
-_indent_single_line :: proc(buffer: ^Buffer, text: string, line_index: int, lines: []int, after_indent_callback: Indent_Callback_Proc) {
+_indent_single_line :: proc(window: ^Window, buffer: ^Buffer, text: string, line_index: int, lines: []int, after_indent_callback: Indent_Callback_Proc) {
     profiling_start("indenting single line")
     count_indent_chars :: proc(text: string) -> (result: int) {
         if len(text) == 0 do return 0
@@ -1816,7 +1918,7 @@ _indent_single_line :: proc(buffer: ^Buffer, text: string, line_index: int, line
         }
 
         if after_indent_callback != nil {
-            after_indent_callback(curr_line_start, curr_line_start + offset, offset)
+            after_indent_callback(window, curr_line_start, curr_line_start + offset, offset)
         }
     }
     profiling_end()

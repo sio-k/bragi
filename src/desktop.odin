@@ -45,42 +45,38 @@ Pane_Info :: struct {
 
 @(private)
 desktop_init :: proc() {
+    // HACK (sio): we only save/load state in the first window for now
+    window := windows[0]
+
     if !settings.use_desktop_file {
-        active_pane = pane_create()
+        window.active_pane = pane_create(window)
         return
     }
 
     desktop_filepath := get_desktop_filepath()
 
     if !os.exists(desktop_filepath) {
-        active_pane = pane_create()
+        window.active_pane = pane_create(window)
         return
     }
 
     desktop_data, desktop_success := os.read_entire_file(desktop_filepath, context.temp_allocator)
 
     if !desktop_success {
-        active_pane = pane_create()
+        window.active_pane = pane_create(window)
         return
     }
 
     info := parse_desktop_file(string(desktop_data))
 
     if info.failed_to_parse {
-        active_pane = pane_create()
+        window.active_pane = pane_create(window)
         return
     }
 
     for len(info.buffers_to_open) > 0 {
         fullpath := pop(&info.buffers_to_open)
-        buffer_data, buffer_success := os.read_entire_file(fullpath, context.temp_allocator)
-
-        if !buffer_success {
-            log.errorf("couldn't open file '{}'", fullpath)
-            continue
-        }
-
-        buffer_get_or_create_from_file(fullpath, buffer_data)
+        open_file_in_buffer(fullpath)
     }
 
     // we reverse it so we open it as intended
@@ -89,7 +85,7 @@ desktop_init :: proc() {
     for len(info.panes_to_open) > 0 {
         buffer_found := false
         pane_info := pop(&info.panes_to_open)
-        new_pane := pane_create()
+        new_pane := pane_create(window)
         flag_pane(new_pane, {.Restored_Recently})
 
         new_pane.local_font_size = f32(pane_info.font_size)
@@ -118,12 +114,15 @@ desktop_init :: proc() {
 
     delete(info.buffers_to_open)
     delete(info.panes_to_open)
-    active_pane = open_panes[info.active_pane_index]
-    update_pane_layout()
+    window.active_pane = window.open_panes[info.active_pane_index]
+    update_pane_layout(window)
 }
 
 @(private)
 desktop_save :: proc() {
+    // HACK (sio): we only save/load state in the first window for now
+    window := windows[0]
+
     if !settings.use_desktop_file do return
 
     result := strings.builder_make(context.temp_allocator)
@@ -153,8 +152,8 @@ desktop_save :: proc() {
 
     strings.write_string(&result, "::panes\n")
 
-    for pane, index in open_panes {
-        if pane.uuid == active_pane.uuid do active_pane_index = index
+    for pane, index in window.open_panes {
+        if pane.uuid == window.active_pane.uuid do active_pane_index = index
 
         strings.write_string(&result, fmt.tprintf(":{}\n", index))
 

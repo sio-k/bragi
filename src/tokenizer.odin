@@ -39,7 +39,7 @@ Token_Kind :: enum u8 {
 Operation :: enum {
     Ampersand, Ampersand_Ampersand, Ampersand_Equal, Ampersand_Tilde, Ampersand_Tilde_Equal,
     Asterisk, Asterisk_Equal, Bang, Bang_Equal, Colon, Colon_Colon, Colon_Equal,
-    Equal, Equal_Equal, Equal_Greater, Minus, Minus_Equal, Minus_Greater, Plus, Plus_Equal,
+    Equal, Equal_Equal, Equal_Greater, Minus, Minus_Equal, Minus_Greater, Minus_Minus, Minus_Minus_Equal, Plus, Plus_Equal, Plus_Plus, Plus_Plus_Equal,
     Slash, Slash_Equal, Greater, Greater_Equal, Greater_Greater, Greater_Greater_Equal,
     Backtick, Less, Less_Equal, Less_Less, Less_Less_Equal, Dot_Dot_Equal, Dot_Dot_Less,
     Percent, Percent_Equal, Percent_Percent, Percent_Percent_Equal,

@@ -21,6 +21,7 @@ Command :: enum u32 {
     remove_prev_word,
     remove_next_word,
 
+    // TODO: insert literal tab character
     indent_or_tab_stop,
     newline_and_indent,
 
@@ -76,22 +77,27 @@ Command :: enum u32 {
     close_this_pane,
     close_other_panes,
     new_pane_to_the_right,
+    // TODO (sio): new_pane_below
     other_pane,
+
+    new_window,
+    close_window,
 
     undo,
     redo,
 
     cut_selection,
+    cut_selection_or_remove_prev_word,
     cut_line,
     copy_selection,
     copy_line,
     paste,
     paste_from_history,
+
+    // TODO (sio): project commands
 }
 
-commands_init :: proc() {
-    log.warn("setting default commands, this should be replaced for commands in settings.bragi")
-}
+commands_init :: proc() {}
 
 commands_destroy :: proc() {
     delete(commands_map)
@@ -128,8 +134,9 @@ map_keystroke_to_command :: proc(key: Key_Code, modifiers: Modifiers_Set, loc :=
     return .noop, cmd_key_combo
 }
 
-quit_mode_command :: proc() {
-    widget_close(was_quit=true)
+quit_mode_command :: proc(window: ^Window) {
+    widget_close(window, was_quit=true)
+    active_pane := window.active_pane
     active_pane.cursor_selecting = false
 
     if len(active_pane.cursors) > 1 {

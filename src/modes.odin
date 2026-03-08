@@ -8,6 +8,12 @@ Major_Mode :: enum u8 {
     Jai,
     JavaScript,
     Odin,
+    C,
+    ARM_Asm,
+    X86_Asm,
+    Nix,
+    Org,
+    Zig,
 }
 
 Major_Mode_Settings :: struct {
@@ -50,6 +56,54 @@ major_modes_init :: proc() {
         file_extensions = ".odin",
         visual_tokenization_proc = tokenize_odin,
         indent_tokenization_proc = tokenize_odin_indentation,
+    }
+
+    major_mode_settings[.C] = {
+        visual_name = "C",
+        electric_indent = true,
+        file_extensions = ".c|.h|.cpp|.cxx|.cc|.hh|.hpp",
+        visual_tokenization_proc = tokenize_c,
+        indent_tokenization_proc = tokenize_c_indentation,
+    }
+
+    major_mode_settings[.ARM_Asm] = {
+        visual_name = "arm",
+        electric_indent = false,
+        file_extensions = ".s|.S",
+        visual_tokenization_proc = tokenize_arm,
+        indent_tokenization_proc = nil,
+    }
+
+    major_mode_settings[.X86_Asm] = {
+        visual_name = "x86",
+        electric_indent = false,
+        file_extensions = ".asm",
+        visual_tokenization_proc = tokenize_x86,
+        indent_tokenization_proc = nil,
+    }
+
+    major_mode_settings[.Nix] = {
+        visual_name = "nix",
+        electric_indent = false,
+        file_extensions = ".nix",
+        visual_tokenization_proc = tokenize_nix,
+        indent_tokenization_proc = nil,
+    }
+
+    major_mode_settings[.Org] = {
+        visual_name = "org",
+        electric_indent = false,
+        file_extensions = ".org",
+        visual_tokenization_proc = tokenize_org,
+        indent_tokenization_proc = nil,
+    }
+
+    major_mode_settings[.Zig] = {
+        visual_name = "zig",
+        electric_indent = true,
+        file_extensions = ".zig",
+        visual_tokenization_proc = tokenize_zig,
+        indent_tokenization_proc = tokenize_zig_indentation,
     }
 }
 

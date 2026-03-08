@@ -292,6 +292,7 @@ Event :: struct {
     // Warns that this event wasn't handled properly, helpful during
     // development to make sure inputs are being accounted for.
     handled:   bool,
+    window:    ^Window,
     timestamp: time.Tick,
     variant:   Event_Variant,
 }
@@ -333,35 +334,44 @@ Event_Window :: struct {
     // active resizing, as in the user hasn't yet completed their resize
     resizing:         bool,
     moving:           bool,
+    window_focused:   bool,
+    closed:           bool,
     dpi_scale:        f32,
     window_height:    i32,
     window_width:     i32,
-    window_focused:   bool,
 }
 
 Mouse_State :: struct {
-    has_moved:     bool,
-    position:      Vector2,
-    last_position: Vector2,
-    scroll_x:      f32,
-    scroll_y:      f32,
+    has_moved:     bool,               // 0B offset
+    // 3 bytes unused
 
-    left_button:   Mouse_Button_State,
-    middle_button: Mouse_Button_State,
-    right_button:  Mouse_Button_State,
-}
+    position:      Vector2,            // 4B offset (size 8B)
+    last_position: Vector2,            // 12B offset (size 8B)
+    scroll_x:      f32,                // 20B offset
+    scroll_y:      f32,                // 24B offset
+
+    left_button:   Mouse_Button_State, // 28B offset (size 32B)
+    middle_button: Mouse_Button_State, // 60B offset (size 32B)
+    right_button:  Mouse_Button_State, // 96B offset (size 32B)
+}                                      // size: 128B
+#assert(size_of(Vector2) == 8)
+#assert(align_of(Vector2) == 4)
+#assert(size_of(Mouse_Button_State) == 32)
 
 Mouse_Button_State :: struct {
-    is_down:                  bool,
-    is_dragging:              bool,
-    just_clicked:             bool,
-    just_double_clicked:      bool,
-    just_triple_clicked:      bool,
-    last_clicked_position:    Vector2,
-    last_clicked_time:        time.Tick,
-    last_double_clicked_time: time.Tick,
-}
+    is_down:                  bool, // 0B offset
+    is_dragging:              bool, // 1B offset
+    just_clicked:             bool, // 2B offset
+    just_double_clicked:      bool, // 3B offset
+    just_triple_clicked:      bool, // 4B offset
+    // 3 bytes unused
 
+    last_clicked_position:    Vector2,   // 8B offset (size 8B)
+    last_clicked_time:        time.Tick, // 16B offset
+    last_double_clicked_time: time.Tick, // 24B offset
+}                                        // size: 32B
+#assert(size_of(Vector2) == 8)
+#assert(size_of(time.Tick) == 8)
 
 input_key_code_to_string :: #force_inline proc(key_code: Key_Code) -> string {
     assert(key_code != .UNDEFINED)
@@ -384,8 +394,9 @@ input_update_and_prepare :: proc() {
     clear(&events_this_frame)
 }
 
-input_register :: proc(variant: Event_Variant) {
+input_register :: proc(window: ^Window, variant: Event_Variant) {
     append(&events_this_frame, Event{
+        window    = window,
         timestamp = time.tick_now(),
         variant   = variant,
     })
@@ -396,18 +407,18 @@ input_destroy :: proc() {
     delete(events_this_frame)
 }
 
-input_update_mouse_state :: proc() {
-    update_button_state :: proc(b: Mouse_Button, s: ^Mouse_Button_State) {
+input_update_mouse_state :: proc(window: ^Window) {
+    update_button_state :: proc(window: ^Window, b: Mouse_Button, s: ^Mouse_Button_State) {
         DOUBLE_CLICK_DISTANCE_TOLERANCE :: 2
         DOUBLE_CLICK_TIME_TOLERANCE     :: 200
 
         time_from_last_click := time.duration_milliseconds(
-            time.tick_diff(s.last_clicked_time, previous_frame_time),
+            time.tick_diff(s.last_clicked_time, window.previous_frame_time),
         )
         time_from_last_double_click := time.duration_milliseconds(
-            time.tick_diff(s.last_double_clicked_time, previous_frame_time),
+            time.tick_diff(s.last_double_clicked_time, window.previous_frame_time),
         )
-        distance_from_last_click := s.last_clicked_position - mouse_state.position
+        distance_from_last_click := s.last_clicked_position - window.mouse_state.position
         max_distance := max(abs(distance_from_last_click.x), abs(distance_from_last_click.y))
 
         is_down := platform_mouse_button_down(b)
@@ -415,37 +426,37 @@ input_update_mouse_state :: proc() {
         just_clicked := !s.is_down && is_down
 
         s.is_down = is_down
-        s.is_dragging = is_dragging && mouse_state.position != s.last_clicked_position
+        s.is_dragging = is_dragging && window.mouse_state.position != s.last_clicked_position
         s.just_clicked = just_clicked
 
         if just_clicked {
-            last_keystroke = time.tick_now()
-            s.last_clicked_time = previous_frame_time
-            s.last_clicked_position = mouse_state.position
+            window.last_keystroke = time.tick_now()
+            s.last_clicked_time = window.previous_frame_time
+            s.last_clicked_position = window.mouse_state.position
 
             s.just_double_clicked = time_from_last_click < DOUBLE_CLICK_TIME_TOLERANCE && max_distance < DOUBLE_CLICK_DISTANCE_TOLERANCE
             s.just_triple_clicked = time_from_last_double_click < DOUBLE_CLICK_TIME_TOLERANCE && max_distance < DOUBLE_CLICK_DISTANCE_TOLERANCE
 
             if s.just_triple_clicked do s.just_double_clicked = false
-            if s.just_double_clicked do s.last_double_clicked_time = previous_frame_time
+            if s.just_double_clicked do s.last_double_clicked_time = window.previous_frame_time
         } else {
             s.just_double_clicked = false
             s.just_triple_clicked = false
         }
     }
 
-    mx, my := platform_get_mouse_position()
-    mouse_state.position = { i32(mx), i32(my) }
-    mouse_state.has_moved = mouse_state.position != mouse_state.last_position
-    mouse_state.last_position = mouse_state.position
+    mx, my := platform_get_mouse_position(window)
+    window.mouse_state.position = { i32(mx), i32(my) }
+    window.mouse_state.has_moved = window.mouse_state.position != window.mouse_state.last_position
+    window.mouse_state.last_position = window.mouse_state.position
 
     // resets these values since they may be captured again by platform this frame.
-    mouse_state.scroll_x = 0
-    mouse_state.scroll_y = 0
+    window.mouse_state.scroll_x = 0
+    window.mouse_state.scroll_y = 0
 
-    if mouse_state.has_moved do platform_toggle_cursor(true)
+    if window.mouse_state.has_moved do platform_toggle_cursor(true)
 
-    update_button_state(.Left,    &mouse_state.left_button  )
-    update_button_state(.Middle,  &mouse_state.middle_button)
-    update_button_state(.Right,   &mouse_state.right_button )
+    update_button_state(window, .Left,    &window.mouse_state.left_button  )
+    update_button_state(window, .Middle,  &window.mouse_state.middle_button)
+    update_button_state(window, .Right,   &window.mouse_state.right_button )
 }
