@@ -6,6 +6,8 @@ package main
 // works. So in the meantime, I leverage all the power of SDL, but I
 // want to make this from scratch instead.
 
+import rt "base:runtime"
+
 import     "core:fmt"
 import     "core:log"
 import     "core:os/os2"
@@ -87,6 +89,14 @@ platform_window_init :: proc() -> (win: Platform_Window) {
 platform_window_destroy :: proc(win: Platform_Window) {
     sdl.DestroyRenderer(win.renderer)
     sdl.DestroyWindow(win.window)
+}
+
+platform_window_set_title :: proc(win: ^Platform_Window, title: string) {
+    rt.DEFAULT_TEMP_ALLOCATOR_TEMP_GUARD()
+    ctitle := strings.clone_to_cstring(
+        title, allocator = context.temp_allocator,
+    )
+    sdl.SetWindowTitle(win.window, ctitle)
 }
 
 platform_init :: proc() {

@@ -78,6 +78,12 @@ windows_destroy :: proc() {
     delete(windows)
 }
 
+windows_set_titles :: proc(title: string) {
+    for w in windows {
+        window_set_title(w, title)
+    }
+}
+
 window_init :: proc() -> (window: ^Window) {
     window = new(Window)
     assert(len(window.panes_storage) == len(window.open_panes_backing))
@@ -103,6 +109,10 @@ window_destroy :: proc(window: ^Window) {
     window.initialized = false
 
     free(window)
+}
+
+window_set_title :: proc(window: ^Window, title: string) {
+    platform_window_set_title(&(window.platform), title)
 }
 
 is_last_window :: proc(window: ^Window) -> bool {

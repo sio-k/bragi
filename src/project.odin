@@ -2,6 +2,7 @@ package main
 
 import rt "base:runtime"
 
+import "core:fmt"
 import "core:log"
 import "core:os"
 import "core:os/os2"
@@ -232,6 +233,12 @@ load_project :: proc (path: string) -> bool {
     fkey_commands_override, fkey_commands_override_ok := file_contents["fkey_command_override"]
     if fkey_commands_override_ok {
         // TODO: check username, and if username matches, load overrides
+    }
+
+    project_name, project_name_ok := file_contents["project_name"]
+    if project_name_ok && project_name.kind == .Str {
+        title := fmt.tprintf("%s - %s", NAME, project_name.str)
+        windows_set_titles(title)
     }
 
     return load_paths_ok ||
