@@ -97,8 +97,10 @@ window_init :: proc() -> (window: ^Window) {
 
 window_destroy :: proc(window: ^Window) {
     widget_close(window)
-    for pane in window.open_panes {
-        pane_destroy(pane)
+
+    // go back to front, pane_destroy usually tries to compact the array
+    for i := len(window.open_panes); i > 0; i -= 1 {
+        pane_destroy(window.open_panes[i - 1])
     }
     window.open_panes = nil
     if window.fonts_initialized {
@@ -199,7 +201,7 @@ pane_add :: proc(window: ^Window) -> ^Pane {
 
         rt.DEFAULT_TEMP_ALLOCATOR_TEMP_GUARD()
 
-        found := make([]int, len(window.open_panes))
+        found := make([]int, len(window.open_panes), allocator = context.temp_allocator)
         for open_pane, i in window.open_panes {
             found[i] = pane_storage_idx(window, open_pane)
         }
